@@ -10,8 +10,8 @@ curl -fsSL https://raw.githubusercontent.com/aadil-sp/shakthikulangara-project-2
 
 The script:
 
-- downloads the ready-made app for your computer from the latest release
-- installs it as `/usr/local/bin/markerpilot`, asking for your `sudo` password once
+- downloads the ready-made app for your computer from the latest release and installs it as `/usr/local/bin/markerpilot`, asking for your `sudo` password once
+- installs from source with pip if there's no ready-made app for your computer
 - on Linux, installs the small Qt display libraries and adds you to the `dialout` group so the app can use the USB gateway (log out and back in once)
 
 ## Windows (PowerShell)
@@ -20,12 +20,12 @@ The script:
 irm https://raw.githubusercontent.com/aadil-sp/shakthikulangara-project-2/main/install/install.ps1 | iex
 ```
 
-This puts `markerpilot.exe` in `%LOCALAPPDATA%\MarkerPilot`, adds it to your PATH and creates a Start-menu shortcut. Open a **new** terminal afterwards.
+This puts `markerpilot.exe` in `%LOCALAPPDATA%\MarkerPilot`, adds it to your PATH and creates a Start-menu shortcut. If the release has no Windows app yet, it installs MarkerPilot with pip instead, installing Python through winget first if you don't have it. Open a **new** terminal afterwards.
 
 ## Any computer with Python 3.9+ (pipx)
 
 ```bash
-pipx install "git+https://github.com/aadil-sp/shakthikulangara-project-2.git#subdirectory=robotics"
+pipx install "https://github.com/aadil-sp/shakthikulangara-project-2/archive/refs/heads/main.zip#subdirectory=robotics"
 ```
 
 Use this on Intel Macs, Raspberry Pi and ARM Linux, which have no ready-made app.
@@ -34,9 +34,8 @@ Use this on Intel Macs, Raspberry Pi and ARM Linux, which have no ready-made app
 
 | Computer | File |
 | :--- | :--- |
-| Windows 10/11 (64-bit) | [markerpilot-windows-x86_64.exe](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot-windows-x86_64.exe) |
-| Linux (64-bit, Ubuntu 22.04 or newer) | [markerpilot-linux-x86_64](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot-linux-x86_64) |
 | macOS (Apple Silicon M1/M2/M3/M4) | [markerpilot-macos-arm64](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot-macos-arm64) |
+| Windows / Linux | The installer commands above. Ready-made apps arrive once the [release pipeline](../ci/README.md) is enabled. |
 | Firmware for all boards (zip) | [firmware-all-boards.zip](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/firmware-all-boards.zip) |
 
 On Linux and macOS, make a downloaded file runnable with `chmod +x markerpilot-*`.

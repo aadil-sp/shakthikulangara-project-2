@@ -11,11 +11,11 @@
   irm https://raw.githubusercontent.com/aadil-sp/shakthikulangara-project-2/main/install/install.ps1 | iex
   ```
 
-Before upload, each app file in this release was built by GitHub Actions and passed the end-to-end simulator self-test on its own operating system.
+The installers use a ready-made app from this release when there is one for your computer. Otherwise they install MarkerPilot from source with pip, and on Windows they install Python first with winget if needed.
 
 ### What's included
 
-- `markerpilot-*`: the stand-alone app (Windows, Linux, macOS Apple Silicon)
+- `markerpilot-macos-arm64`: stand-alone app for Apple Silicon Macs, built and self-tested on macOS
 - `firmware-all-boards.zip`: Arduino sketches for every board:
   - HazardGuard C3 (electronics)
   - Multi-Hazard Monitor (IoT)
@@ -23,3 +23,5 @@ Before upload, each app file in this release was built by GitHub Actions and pas
   - MarkerPilot USB gateway (robotics)
 - the three project report PDFs
 - `install.sh` / `install.ps1`: the installers
+
+Stand-alone Windows and Linux apps will be added by the release pipeline in `ci/release.yml` once it is enabled. Until then, the installers install from source on those systems.
