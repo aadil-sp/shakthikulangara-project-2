@@ -4,8 +4,8 @@
 
 Needs: reportlab, matplotlib, numpy, opencv (robotics graphs run the real simulator).
 Robotics graphs use real simulator runs of the MarkerPilot code; the electronics
-graph replays the firmware's alarm logic; the IoT table holds readings logged
-from the real board.
+graph replays the firmware's alarm logic; the IoT graph replays the fish monitor's
+voyage-story simulator and alarm formulas.
 """
 
 import json
@@ -216,26 +216,95 @@ def electronics_graph():
     plt.close(fig)
 
 
+def iot_story():
+    """Replays the firmware's voyage-story simulator and alarm logic (same formulas as fish_quality_monitor.ino)."""
+    def ramp(t, t0, t1, a, b):
+        if t <= t0:
+            return a
+        if t >= t1:
+            return b
+        k = (t - t0) / (t1 - t0)
+        return a + (b - a) * k * k * (3 - 2 * k)
+
+    tw, td, ww, wd, gw, gd = 1.0, 4.0, 2.0, 5.0, 350, 550
+    rng = random.Random(7)
+    out = []
+    for i in range(0, 241):
+        t = float(i)
+        temp = ramp(t, 40, 80, 0.4, 3.0)
+        if t >= 80: temp = ramp(t, 80, 130, 3.0, 2.0)
+        if t >= 150: temp = ramp(t, 150, 195, 2.0, 5.5)
+        if t >= 200: temp = ramp(t, 200, 225, 5.5, 0.4)
+        water = ramp(t, 40, 80, 0.8, 1.8)
+        if t >= 80: water = ramp(t, 80, 125, 1.8, 7.0)
+        if t >= 130: water = ramp(t, 130, 145, 7.0, 1.0)
+        if t >= 200: water = ramp(t, 200, 215, 1.0, 0.8)
+        gas = 190.0
+        if t >= 150: gas = ramp(t, 150, 195, 190, 640)
+        if t >= 200: gas = ramp(t, 200, 220, 640, 190)
+        temp += rng.uniform(-0.15, 0.15)
+        water = max(0.0, water + rng.uniform(-0.15, 0.15))
+        gas = int(gas + rng.uniform(-8, 8))
+        mq5 = 178 <= t < 205
+        wet = water > 3.0
+        lv = lambda v, w, d: 2 if v > d else 1 if v > w else 0
+        tl, wl, gl = lv(temp, tw, td), lv(water, ww, wd), lv(gas, gw, gd)
+        if wet and wl == 0: wl = 1
+        if mq5: gl = 2
+        score = 100.0
+        if temp > 0: score -= temp * 6
+        if water > ww: score -= (water - ww) * 10
+        if wet: score -= 8
+        if gas > 220: score -= (gas - 220) / 7.0
+        if mq5: score -= 25
+        codes = [c for c, on in (("ICE", tl), ("drAn", wl), ("ALCO", gas > gw), ("rOt", mq5)) if on]
+        out.append(dict(t=t, temp=temp, water=water, gas=gas, mq5=mq5, wet=wet, level=max(tl, wl, gl),
+                        score=max(0, min(100, round(score))), codes=codes))
+    return out
+
+
 def iot_graph():
-    """Readings logged from the real board (27 Oct 2026) against the thresholds."""
-    logged = [(20, 714, 954, 350), (22, 712, 952, 341), (24, 684, 930, 347)]
-    fig, ax = plt.subplots(figsize=(7.5, 3.2), dpi=170)
-    names = ["MQ-3 alcohol", "MQ-5 LPG"]
-    clean = [sum(r[1] for r in logged) / 3, sum(r[2] for r in logged) / 3]
-    ax.barh(names, clean, color="#0f9488", label="clean room air (measured)")
-    ax.axvline(1800, color="#d97706", ls="--", label="warning 1800 mV")
-    ax.axvline(2800, color="#dc2626", ls="--", label="danger 2800 mV")
-    for i, v in enumerate(clean):
-        ax.text(v + 40, i, f"{v:.0f} mV", va="center", fontsize=8)
-    ax.set_xlim(0, 3500)
-    ax.set_xlabel("Sensor output (mV)")
-    ax.set_title("Gas sensors in clean air vs alarm thresholds (real board)", fontsize=10, weight="bold")
-    ax.legend(fontsize=7.5, loc="lower right")
-    ax.grid(axis="x", alpha=0.3)
+    data = iot_story()
+    t = [d["t"] for d in data]
+    fig, (a1, a2, a3) = plt.subplots(3, 1, figsize=(7.5, 6.2), dpi=170, sharex=True, gridspec_kw={"height_ratios": [2.2, 1.6, 1.4]})
+    phases = [(0, 40, "fresh"), (40, 80, "ice melting"), (80, 130, "drain blocked"), (130, 150, "outlet\ncleared"),
+              (150, 200, "fish rotting"), (200, 240, "fresh ice")]
+    for a in (a1, a2, a3):
+        for i, (x0, x1, _) in enumerate(phases):
+            if i % 2:
+                a.axvspan(x0, x1, color="#e2e8f0", alpha=0.5, lw=0)
+        a.grid(alpha=0.3)
+    top = a1.secondary_xaxis("top")
+    top.set_xticks([(x0 + x1) / 2 for x0, x1, _ in phases])
+    top.set_xticklabels([n for _, _, n in phases], fontsize=7, color="#475569")
+    top.tick_params(length=0)
+    a1.plot(t, [d["temp"] for d in data], color="#dc2626", lw=1.8, label="hold temperature (\u00b0C)")
+    a1.plot(t, [d["water"] for d in data], color="#2563eb", lw=1.8, label="meltwater height (cm)")
+    a1.axhline(1.0, color="#dc2626", ls=":", lw=1, label="ice limit 1 \u00b0C")
+    a1.axhline(5.0, color="#2563eb", ls="--", lw=1, label="drain-blocked limit 5 cm")
+    a1.set_ylim(0, 8)
+    a1.legend(fontsize=6.8, loc="upper left", ncol=2)
+    fig.suptitle("Voyage-story replay of the firmware: readings, alarms and freshness", fontsize=10, weight="bold")
+    a2.plot(t, [d["gas"] for d in data], color="#7c3aed", lw=1.8, label="MQ-3 alcohol / amine (ADC)")
+    a2.axhline(350, color="#d97706", ls="--", lw=1, label="warning 350")
+    a2.axhline(550, color="#dc2626", ls="--", lw=1, label="danger 550")
+    a2.fill_between(t, 0, [700 if d["mq5"] else 0 for d in data], color="#dc2626", alpha=0.12, step="post", label="MQ-5 spoilage gas tripped")
+    a2.set_ylim(0, 700)
+    a2.legend(fontsize=6.8, loc="upper left")
+    a3.plot(t, [d["score"] for d in data], color="#059669", lw=2, label="freshness score")
+    a3.step(t, [d["level"] * 50 for d in data], color="#334155", where="post", lw=1, label="alarm (0 ok / 50 warn / 100 danger)")
+    a3.set_ylim(-5, 105)
+    a3.set_xlabel("Time (s)")
+    a3.legend(fontsize=6.8, loc="lower left")
     fig.tight_layout()
-    fig.savefig(ASSETS / "iot_readings.png")
+    fig.savefig(ASSETS / "iot_story.png")
     plt.close(fig)
-    return logged
+    # first moment each display code appears
+    first = {}
+    for d in data:
+        for c in d["codes"]:
+            first.setdefault(c, d)
+    return data, first
 
 
 # =============================================================================
@@ -578,92 +647,127 @@ def electronics_spec():
         ]}
 
 
-def iot_spec(logged):
-    block_diagram(ASSETS / "iot_block.png", "Multi-Hazard Monitor", "ESP32-C3\nhazard logic\n+ hotspot",
-                  ["MQ-5 LPG gas", "MQ-3 alcohol vapour", "DHT11 temp / humidity", "Soil moisture probe", "HC-SR04 water level"],
-                  ["Red alarm LED", "Open WiFi hotspot", "Live phone dashboard\n192.168.4.1", "JSON data /api/data"], "#99f6e4")
+def iot_spec(story):
+    data, first = story
+    block_diagram(ASSETS / "iot_block.png", "Marine Fish Quality Monitor", "NodeMCU\nESP8266\nfreshness logic\n+ hotspot",
+                  ["DHT11 ice temperature", "HC-SR04 meltwater height", "Soil probe: water at fish", "MQ-3 alcohol / chemical", "MQ-5 spoilage gas"],
+                  ["TM1637 summary display\n(flashes on fault)", "Red alarm LED", "Owner's phone / laptop\n192.168.4.1", "Flash log (CSV)"], "#99f6e4")
     flowchart(ASSETS / "iot_flow.png", [
-        ("Read 5 sensors (16x oversampled analog)", "end"), ("Sensor missing? report 'not detected'", "decision"),
-        ("Gas sensors warming up? (first 60 s)", "decision"), ("Compare each reading with its limits", "step"),
-        ("Overall level = worst sensor", "step"), ("Red LED: off / slow blink / fast blink", "step"),
-        ("Phones read /api/data every second", "end")], "#99f6e4")
-    iot_graph()
-    rows = [["Uptime", "MQ-3 (mV)", "MQ-5 (mV)", "Soil raw (mV)"]] + [[f"{r[0]} s", r[1], r[2], r[3]] for r in logged]
+        ("Read sensors (or the simulator)", "end"), ("Sensor missing? show NO SENSOR / E-code", "decision"),
+        ("Compare temperature, water and gas with limits", "step"), ("Freshness score 0-100 and grade", "step"),
+        ("Normal: TM1637 cycles summary values", "step"), ("Abnormal: flash ICE / drAn / ALCO / rOt + red LED", "decision"),
+        ("Log every minute; phone reads /api/data every second", "end")], "#99f6e4")
+    lowest = min(data, key=lambda d: d["score"])
+    peak_w = max(data, key=lambda d: d["water"])
+    def when(code):
+        d = first.get(code)
+        return f"{d['t']:.0f} s" if d else "-"
+    rows = [["Phase of the voyage", "What the sensors saw", "Box display", "First alarm"],
+            ["Fresh catch on ice (0-40 s)", "0.4 °C, 0.8 cm water, MQ-3 ~190", "cycles 0°C / H 1 / AL18 / Fr97", "none"],
+            ["Ice melting (40-80 s)", "temperature climbs to 3 °C", "flashes ICE", when("ICE")],
+            ["Drain outlet blocked (80-130 s)", f"water rises to {peak_w['water']:.1f} cm, probe wet", "flashes drAn", when("drAn")],
+            ["Outlet cleared (130-150 s)", "water drains back to 1 cm", "ICE only", "-"],
+            ["Fish rotting (150-200 s)", "5.5 °C, MQ-3 up to ~640, MQ-5 trips", "flashes ALCO, rOt, ICE", f"{when('ALCO')} / {when('rOt')}"],
+            ["Fresh ice (200-240 s)", "all values back to normal", "summary again", "cleared"]]
     return {
-        "title": "Multi-Hazard Monitor: An IoT Safety Station with a Phone Dashboard",
-        "subtitle": "LPG, alcohol vapour, temperature, soil saturation and water-level monitoring over a password-free WiFi hotspot",
-        "short": "Multi-Hazard Monitor - IoT safety station", "category": "Internet of Things", "board": "ESP32-C3", "theme": "#0f766e",
+        "title": "Marine Fish Quality Monitor: IoT Supervision of a Fishing Boat's Fish Hold",
+        "subtitle": "Ice temperature, meltwater clogging and spoilage-gas monitoring with a summary display, data logging and a phone dashboard for the boat owner",
+        "short": "Marine Fish Quality Monitor - IoT fish-hold supervisor", "category": "Internet of Things", "board": "NodeMCU ESP8266", "theme": "#0f766e",
         "sections": [
             {"h": "Abstract", "items": [("p",
-                "The Multi-Hazard Monitor is an Internet-of-Things station that watches five different dangers at once: LPG / cooking "
-                "gas leaks (MQ-5), alcohol or solvent vapour (MQ-3), high temperature (DHT11), soil that is too dry or so wet that "
-                "flooding or landslides become likely (soil moisture probe), and rising water or an approaching object (ultrasonic). "
-                "The ESP32-C3 creates its own open WiFi hotspot; any phone that joins it is taken straight to a live dashboard at "
-                "192.168.4.1 that updates every second. A single red LED shows the overall state on the device itself. Sensors that "
-                "are disconnected are clearly shown as 'not detected' instead of displaying fake values.")]},
+                "Fishing boats keep their catch in an insulated hold packed with crushed ice. Three things ruin the catch at sea: the "
+                "ice running out, meltwater that cannot drain because the outlet is blocked so the fish soak in dirty water, and fish "
+                "that start to rot (or have been treated with chemicals). The Marine Fish Quality Monitor watches all three with low-cost "
+                "sensors on a NodeMCU ESP8266: a DHT11 for the hold temperature, an ultrasonic sensor for the height of the meltwater, "
+                "a moisture probe that detects water reaching the fish, an MQ-3 for alcohol and chemical vapour and an MQ-5 for spoilage "
+                "gas. It logs every reading, computes a freshness score, shows only a short summary on a 4-digit TM1637 display and flashes "
+                "it with a fault code when anything goes abnormal. The boat owner joins the board's own WiFi and sees everything live on a "
+                "phone or laptop. A built-in simulator plays a full voyage so the system can be demonstrated without sensors.")]},
             {"h": "Aim of the project", "items": [("ul", [
-                "Monitor gas, vapour, temperature, soil moisture and water level with one low-cost board.",
-                "Show live readings on any phone without internet or an app.",
-                "Warn with a simple red LED: off, slow blink, fast blink.",
-                "Be honest about faults: never show a made-up reading when a sensor is missing."])]},
+                "Keep the fish hold at ice temperature (0 °C) and warn when the ice is melting away.",
+                "Measure the meltwater height and warn when too much water means the drain outlet is blocked.",
+                "Detect alcohol / ammonia-type vapour from rotting fish or chemicals used on the catch.",
+                "Log the data through the voyage, show a summary on the box and the full picture on the owner's phone or laptop.",
+                "Provide a simulator so the whole system can be shown and tested without sensors."])]},
             {"h": "Problem statement and need", "items": [("p",
-                "Kerala faces LPG accidents at home and landslides and floods during the monsoon. Most monitoring systems watch only "
-                "one danger and need internet or an app. A single cheap station that watches several dangers and can be read on any "
-                "phone nearby is useful in homes, farms, schools and hillside settlements.")]},
+                "Fish is one of the most perishable foods. On ice it stays fresh for days, but once the hold rises above 0 °C bacteria "
+                "multiply quickly. Melted ice must drain away: if the drain clogs with scales and slime, the bottom layer of fish soaks in "
+                "meltwater and spoils fast. Spoiling fish give off volatile compounds such as ammonia, amines and alcohols. The crew is "
+                "busy fishing and the hold is closed, so these problems are often found only at the harbour, when the catch has already "
+                "lost its price. Some sellers also use chemicals to make old fish look fresh. A cheap monitor that watches the hold all "
+                "the time and tells the owner immediately protects both the catch and the buyer.")]},
             {"h": "Components used and cost", "items": [("table", [
                 ["Component", "Model", "Qty", "Purpose", "Approx. cost"],
-                ["Controller", "ESP32-C3 SuperMini", "1", "Reads sensors, hotspot, web server", "Rs. 300"],
-                ["LPG sensor", "MQ-5 module", "1", "Cooking gas / natural gas leaks", "Rs. 150"],
-                ["Alcohol sensor", "MQ-3 module", "1", "Alcohol, sanitiser and solvent vapour", "Rs. 150"],
-                ["Temperature sensor", "DHT11", "1", "Temperature and humidity", "Rs. 110"],
-                ["Soil sensor", "Soil moisture probe + module", "1", "Dry soil / waterlogged soil", "Rs. 80"],
-                ["Ultrasonic sensor", "HC-SR04", "1", "Water level rise or object too close", "Rs. 90"],
-                ["Indicator", "Red 5 mm LED + 220 Ω", "1", "Overall alarm state", "Rs. 5"],
-                ["Resistors", "10 kΩ x4, 1 kΩ, 2 kΩ", "1 set", "MQ output dividers, echo divider", "Rs. 15"],
-                ["Power", "5 V 2 A USB-C adapter", "1", "Supply (MQ heaters need 5 V)", "Rs. 150"],
-                ["Total", "", "", "", "Rs. 1,050"]], [28, 40, 11, 68, 25], "Table 1: Bill of materials (approximate local prices)")]},
+                ["Controller", "NodeMCU ESP8266 (ESP-12E)", "1", "Reads sensors, logic, logging, hotspot, web server", "Rs. 280"],
+                ["Display", "TM1637 4-digit 7-segment", "1", "Summary values; flashes fault codes", "Rs. 90"],
+                ["Temperature sensor", "DHT11", "1", "Hold (ice) temperature and humidity", "Rs. 110"],
+                ["Ultrasonic sensor", "HC-SR04", "1", "Meltwater height on the hold floor", "Rs. 90"],
+                ["Moisture probe", "Soil moisture probe + module", "1", "Water reaching the bottom fish", "Rs. 80"],
+                ["Alcohol sensor", "MQ-3 module", "1", "Alcohol / amine vapour: rot or chemicals", "Rs. 150"],
+                ["Gas sensor", "MQ-5 module", "1", "Spoilage (decomposition) gas trip", "Rs. 150"],
+                ["Indicator", "Red 5 mm LED + 220 Ω", "1", "Alarm light", "Rs. 5"],
+                ["Resistors", "1 kΩ, 2 kΩ, 4.7 kΩ", "1 set", "Echo divider, MQ-5 DO series resistor", "Rs. 10"],
+                ["Power", "5 V 1-2 A USB supply / power bank", "1", "Supply (MQ heaters need 5 V)", "Rs. 150"],
+                ["Total", "", "", "", "Rs. 1,115"]], [28, 40, 11, 68, 25], "Table 1: Bill of materials (approximate local prices)")]},
             {"h": "Circuit connections", "items": [
-                ("p", "Analog sensors must use the ESP32-C3's ADC1 pins (GPIO 0-4) because ADC2 stops working while WiFi is on. "
-                      "The ADC reads about 0-2.5 V reliably, so each 5 V MQ output goes through a 10 kΩ / 10 kΩ divider and the "
-                      "firmware multiplies the reading back by 2."),
-                ("table", [["Part pin", "ESP32-C3 pin", "Notes"],
-                           ["MQ-3 AO", "GPIO 0", "10k:10k divider"], ["MQ-5 AO", "GPIO 1", "10k:10k divider"],
-                           ["Soil AO", "GPIO 3", "Module powered from 3.3 V"], ["HC-SR04 TRIG / ECHO", "GPIO 4 / 5", "ECHO through 1 kΩ / 2 kΩ divider"],
-                           ["DHT11 DATA", "GPIO 6", "10 kΩ pull-up"], ["Red LED", "GPIO 9", "3.3 V -> 220 Ω -> LED -> GPIO 9 (active LOW)"]],
-                 [45, 35, 92], "Table 2: Wiring")]},
+                ("p", "The NodeMCU has only one analog input (A0). The MQ-3 uses it because its vapour level is shown as a number; the "
+                      "MQ-5 and the moisture probe use the digital outputs of their comparator modules, set with their potentiometers. "
+                      "The HC-SR04 echo is a 5 V signal, so it goes through a 1 kΩ / 2 kΩ divider. The MQ-5 DO is only pulled up "
+                      "by the module's 10 kΩ resistor, so a 4.7 kΩ series resistor is enough to keep the current into the pin tiny."),
+                ("table", [["Part pin", "NodeMCU pin", "Notes"],
+                           ["TM1637 CLK / DIO", "D5 / D6", "VCC from VIN (5 V)"],
+                           ["DHT11 DATA", "D4", "VCC 3.3 V"],
+                           ["HC-SR04 TRIG / ECHO", "D7 / D8", "ECHO through 1 kΩ / 2 kΩ divider, VCC 5 V"],
+                           ["MQ-3 AO", "A0", "board has its own A0 divider, VCC 5 V"],
+                           ["MQ-5 DO", "D1", "through 4.7 kΩ, VCC 5 V"],
+                           ["Soil probe DO", "D2", "VCC 3.3 V"],
+                           ["Red LED", "D0", "through 220 Ω to GND"]],
+                 [45, 35, 92], "Table 2: Wiring (full sheet in CONNECTIONS.md)")]},
             {"h": "System overview", "items": [("img", ASSETS / "iot_block.png", 165, "Figure 1: Block diagram")]},
             {"h": "How I did this (method)", "items": [
-                ("p", "Every analog sensor is read 16 times and averaged with the ESP32's calibrated millivolt function. The soil "
-                      "reading is converted to a percentage using two calibration points (probe in dry air and dipped in water). "
-                      "The DHT11 and ultrasonic sensor are marked missing after 3-4 failed readings in a row, and their cards on the "
-                      "dashboard turn grey. The device runs only as a hotspot (no router), which keeps the WiFi channel fixed so phones "
-                      "never lose the connection. A small DNS server makes phones open the dashboard automatically (captive portal)."),
+                ("p", "The ultrasonic sensor is fixed under the lid looking straight down. Meltwater height = (distance to the empty floor) "
+                      "- (measured distance); the median of the last five pings ignores splashes from the rolling boat. The moisture probe "
+                      "is placed at the level of the lowest fish, so it confirms when the water has reached them. The DHT11 sits in the ice "
+                      "between the fish. The MQ-3 reading is averaged over 8 samples and the MQ gas alarms are ignored for the first 60 s "
+                      "while the heaters warm up."),
+                ("p", "A freshness score starts at 100 and loses points for temperature above 0 °C (6 per degree), meltwater above "
+                      "2 cm (10 per cm), water at the fish (8), MQ-3 vapour above clean air and an MQ-5 trip (25). It is graded FRESH, "
+                      "GOOD, CHECK or SPOILED. The TM1637 normally cycles the temperature, water height, gas level and score. When "
+                      "anything is abnormal it flashes a code (ICE, drAn, ALCO, rOt) followed by the value, and the red LED blinks. "
+                      "Every minute a CSV row is written to the board's flash; the dashboard gives the board the real time from the "
+                      "phone so log rows get real dates. A missing sensor is shown as NO SENSOR, never as a made-up value."),
                 ("img", ASSETS / "iot_flow.png", 90, "Figure 2: Program flow")]},
+            {"h": "Simulator", "items": [("p",
+                "Because the sensors are not always connected, the firmware has a simulator that feeds the same alarm, display, LED and "
+                "logging code. In 'voyage story' mode it plays a 4-minute voyage: fresh catch, ice melting, drain outlet blocked, outlet "
+                "cleared, fish rotting and fresh ice again. In 'manual' mode the owner moves sliders on the dashboard. The dashboard page "
+                "also runs as an offline simulator on any laptop without the board.")]},
             {"h": "Testing and results", "items": [
-                ("p", "The firmware was flashed to the real ESP32-C3 and a laptop confirmed the open hotspot (signal -44 dBm, no "
-                      "password). The serial log below was recorded from the board with the gas sensors in clean room air."),
-                ("table", rows, [30, 40, 40, 40], "Table 3: Readings logged from the real board"),
-                ("img", ASSETS / "iot_readings.png", 160, "Figure 3: Clean-air gas readings are far below the warning limits"),
-                ("p", "In this first test the soil channel read about 345 mV, which the program treats as fully wet, and the DHT11 and "
-                      "ultrasonic sensor were correctly reported as 'not detected' because they were not yet wired. This showed that the "
-                      "fault reporting works: a missing sensor is never shown as a normal reading.")]},
+                ("p", "The graph below is a replay of the firmware's own simulator and alarm formulas over one voyage story. Every alarm "
+                      f"fires in the right phase and clears afterwards; the freshness score falls to {lowest['score']} at the worst point "
+                      f"({lowest['t']:.0f} s, rotting fish without ice) and recovers to 97 with fresh ice."),
+                ("img", ASSETS / "iot_story.png", 165, "Figure 3: Readings, alarms and freshness during the simulated voyage"),
+                ("table", rows, [42, 52, 42, 30], "Table 3: What the monitor reported in each phase"),
+                ("p", "The firmware compiles for the NodeMCU (32 % of flash, 39 % of RAM) and the dashboard was tested in a phone-sized "
+                      "browser in every mode.")]},
             {"h": "Applications", "items": [("ul", [
-                "Kitchens: LPG leak warning.", "Labs and workshops: solvent and alcohol vapour.",
-                "Farms: irrigation reminder when soil is too dry.", "Hill areas: warning when soil is saturated during heavy rain.",
-                "Sumps and drains: rising water alert."])]},
+                "Fishing boats on multi-day voyages.", "Insulated fish boxes at harbours and auction halls.",
+                "Fish transport vans and cold storage rooms.", "Fish markets checking for chemically treated fish."])]},
             {"h": "Advantages and limitations", "items": [("ul", [
-                "Five hazards on one board for about a thousand rupees.", "Any phone can view it; no internet or app needed.",
-                "Clear fault reporting.", "Limitation: MQ sensors give relative readings and need calibration in clean air.",
-                "Limitation: an open hotspot can be joined by anyone nearby (it only shows readings)."])]},
+                "Watches ice, meltwater and spoilage together for about Rs. 1,100.", "Owner sees it on any phone; no internet or app needed.",
+                "Logs the whole voyage; simulator for demonstration and training.",
+                "Limitation: the DHT11 cannot read below 0 °C; a DHT22 or DS18B20 would be more precise.",
+                "Limitation: MQ sensors give relative readings and must be calibrated in clean air; an MQ-135 or MQ-137 would measure ammonia more directly."])]},
             {"h": "Future improvements", "items": [("ul", [
-                "Log history to an SD card or the cloud.", "Add a buzzer and SMS alerts.",
-                "Solar power and a waterproof box for outdoor soil monitoring."])]},
+                "Waterproof DS18B20 probe for exact ice temperature.", "GSM / LoRa link so the owner on shore gets alerts.",
+                "Automatic drain pump when the meltwater is too high.", "Solar charging and an IP65 box for the deck."])]},
             {"h": "Conclusion", "items": [("p",
-                "The Multi-Hazard Monitor shows how one small IoT board can watch several everyday dangers at once and share them "
-                "instantly with every phone nearby, while staying honest about what it can and cannot measure.")]},
+                "The Marine Fish Quality Monitor turns a closed fish hold into something the owner can watch from a phone. It keeps a "
+                "record of the voyage, raises a clear alarm when the ice runs out, the drain blocks or the fish start to spoil, and "
+                "shows its readings honestly - helping fishermen land a fresher, more valuable catch.")]},
             {"h": "References", "items": [("ul", [
-                "Hanwei Electronics - MQ-3 and MQ-5 datasheets.", "Espressif - ESP32-C3 ADC calibration documentation.",
-                "Arduino-ESP32 WebServer and DNSServer libraries."])]},
+                "FAO - Ice in fisheries (Fisheries Technical Paper 331).", "Hanwei Electronics - MQ-3 and MQ-5 datasheets.",
+                "Aosong - DHT11 datasheet.", "ESP8266 Arduino core documentation (ESP8266WebServer, LittleFS)."])]},
         ]}
 
 
@@ -672,8 +776,7 @@ def main():
     results, run_t = robotics_graphs()
     build(HERE / "Robotics_Project_Report_MarkerPilot.pdf", robotics_spec(results, run_t))
     build(HERE / "Electronics_Project_Report_HazardGuard_C3.pdf", electronics_spec())
-    logged = iot_graph()
-    build(HERE / "IoT_Project_Report_Multi_Hazard_Monitor.pdf", iot_spec(logged))
+    build(HERE / "IoT_Project_Report_Fish_Quality_Monitor.pdf", iot_spec(iot_graph()))
 
 
 if __name__ == "__main__":

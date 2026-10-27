@@ -1,23 +1,30 @@
 /*
- * ESP32-C3 Open WiFi Hotspot Test
+ * Open WiFi Hotspot Test (NodeMCU ESP8266 or ESP32-C3)
  * School STEM Project - IoT Test
  *
  * Creates a password-free hotspot "Shakthi-Hotspot-Test" at 192.168.4.1
- * and serves a tiny test page. Red LED on GPIO9 (active LOW) blinks once
- * per second while the hotspot is running.
+ * and serves a tiny test page. The on-board LED blinks once per second
+ * while the hotspot is running.
  */
 
-#include <WiFi.h>
-#include <esp_wifi.h>
-#include <WebServer.h>
+#if defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <ESP8266WebServer.h>
+  ESP8266WebServer server(80);
+  #define PIN_LED_RED  LED_BUILTIN   // GPIO2, active LOW
+#else
+  #include <WiFi.h>
+  #include <esp_wifi.h>
+  #include <WebServer.h>
+  WebServer server(80);
+  #define PIN_LED_RED  9             // SuperMini red LED, active LOW
+#endif
 
 #define AP_SSID      "Shakthi-Hotspot-Test"
 #define AP_CHANNEL   6
-#define PIN_LED_RED  9      // Active LOW
 
 IPAddress apIP(192, 168, 4, 1);
 IPAddress apMask(255, 255, 255, 0);
-WebServer server(80);
 
 void handleRoot() {
   String html = F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -41,12 +48,14 @@ void setup() {
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(apIP, apIP, apMask);
   bool ok = WiFi.softAP(AP_SSID, NULL, AP_CHANNEL);   // NULL password = open network
+#if !defined(ESP8266)
   esp_wifi_set_max_tx_power(44);                       // 11 dBm: avoids SuperMini brownout
+#endif
 
   server.on("/", handleRoot);
   server.begin();
 
-  Serial.println("\n=== ESP32-C3 HOTSPOT TEST ===");
+  Serial.println("\n=== HOTSPOT TEST ===");
   Serial.printf("[WIFI] softAP %s : %s (open, ch %d)\n", ok ? "OK" : "FAILED", AP_SSID, AP_CHANNEL);
   Serial.printf("[WIFI] Open http://%s\n", WiFi.softAPIP().toString().c_str());
 }

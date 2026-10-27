@@ -18,7 +18,7 @@ The installers use a ready-made app from this release when there is one for your
 - `markerpilot-macos-arm64`: stand-alone app for Apple Silicon Macs, built and self-tested on macOS
 - `firmware-all-boards.zip`: Arduino sketches for every board:
   - HazardGuard C3 (electronics)
-  - Multi-Hazard Monitor (IoT)
+  - Marine Fish Quality Monitor (IoT, NodeMCU ESP8266)
   - MarkerPilot car (robotics)
   - MarkerPilot USB gateway (robotics)
 - the three project report PDFs
