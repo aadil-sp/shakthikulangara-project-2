@@ -52,7 +52,7 @@ jobs:
       - run: pip install pyinstaller numpy opencv-python-headless PyQt6 pyserial
       - name: Build single-file app
         run: |
-          pyinstaller --noconfirm --onefile --name markerpilot \
+          pyinstaller --noconfirm --onefile --name markerpilot --paths . \
             --collect-data markerpilot \
             --hidden-import serial.tools.list_ports \
             --exclude-module tkinter \
