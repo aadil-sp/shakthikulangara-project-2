@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markerpilot"
+version = "2.0.0"
+description = "Overhead-camera ArUco navigation for a differential-drive robot car, with simulator and reinforcement learning"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.23",
+    "opencv-python-headless>=4.7",
+    "PyQt6>=6.4",
+    "pyserial>=3.5",
+]
+
+[project.scripts]
+markerpilot = "markerpilot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["markerpilot*"]
+
+[tool.setuptools.package-data]
+markerpilot = ["data/*.json"]
