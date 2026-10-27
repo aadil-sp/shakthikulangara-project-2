@@ -5,9 +5,11 @@
  *   DHT11        hold temperature: above 0 C means the ice is going
  *   HC-SR04      meltwater height on the hold floor: high water means the
  *                drain outlet is blocked and fish are soaking
- *   Soil probe   water has reached the bottom layer of fish
- *   MQ-3         alcohol / amine vapour: rotting fish or chemical preservative
- *   MQ-5         spoilage gas trip (decomposition gases)
+ *   MQ-135       ammonia / amine (TMA) vapour level: rotting fish
+ *   MQ-4         methane trip (anaerobic decomposition in the hold)
+ *
+ * In the code the analog gas channel is still called "mq3" and the digital
+ * gas trip "mq5", so the dashboard and log formats stay the same.
  *
  * Every reading is logged (30 min in RAM for the charts, one row per minute
  * in flash as CSV). The TM1637 only shows a rotating summary and flashes the
@@ -34,8 +36,8 @@ enum Level : uint8_t { LV_OK = 0, LV_WARN = 1, LV_DANGER = 2 };
 enum AlertBit : uint16_t {
   AL_ICE      = 1 << 0,   // temperature above 0 C
   AL_DRAIN    = 1 << 1,   // meltwater too high / water at the fish
-  AL_ALCOHOL  = 1 << 2,   // MQ-3 high: rotten fish or chemical
-  AL_ROT      = 1 << 3,   // MQ-5 tripped
+  AL_ALCOHOL  = 1 << 2,   // MQ-135 high: ammonia / amines from rotting fish
+  AL_ROT      = 1 << 3,   // MQ-4 tripped: methane
   AL_SENSOR   = 1 << 4,   // a sensor is not answering (live mode)
 };
 
@@ -48,7 +50,7 @@ struct Settings {
   float holdDepth, tempWarn, tempDanger, waterWarn, waterDanger;
   int16_t mq3Warn, mq3Danger;
 };
-const uint32_t SETTINGS_MAGIC = 0xF15A0004;
+const uint32_t SETTINGS_MAGIC = 0xF15A0005;   // bump when defaults change
 Settings cfg;
 
 struct Reading {
@@ -59,7 +61,7 @@ struct Reading {
   bool  dhtOk = false, usOk = false, mq3Ok = false;
 } rd;
 
-struct SimInput { float tempC = 0.5f, humidity = 92, waterCm = 0.8f; int mq3 = 190; bool mq5 = false, wet = false; } simManual;
+struct SimInput { float tempC = 0.5f, humidity = 92, waterCm = 0.8f; int mq3 = 420; bool mq5 = false, wet = false; } simManual;
 
 uint16_t alerts = 0;
 Level tempLv = LV_OK, waterLv = LV_OK, gasLv = LV_OK, overall = LV_OK;
@@ -147,7 +149,7 @@ void readGas() {
   rd.mq3Ok = v > MQ3_MISSING_ADC;
   rd.mq3 = rd.mq3Ok ? v : -1;
   rd.mq5Trip = (digitalRead(PIN_MQ5_DO) == LOW) == MQ5_ACTIVE_LOW;
-  rd.wet     = (digitalRead(PIN_SOIL_DO) == LOW) == SOIL_ACTIVE_LOW;
+  rd.wet     = false;           // no soil probe fitted
 }
 
 // ------------------------------------------------------------------ simulator
@@ -186,15 +188,15 @@ void simulate() {
     if (t >= 80)  water = ramp(t, 80, 125, 1.8f, 7.0f);
     if (t >= 130) water = ramp(t, 130, 145, 7.0f, 1.0f);
     if (t >= 200) water = ramp(t, 200, 215, 1.0f, 0.8f);
-    float gas = 190;
-    if (t >= 150) gas = ramp(t, 150, 195, 190, 640);
-    if (t >= 200) gas = ramp(t, 200, 220, 640, 190);
+    float gas = 420;
+    if (t >= 150) gas = ramp(t, 150, 195, 420, 860);
+    if (t >= 200) gas = ramp(t, 200, 220, 860, 420);
     rd.tempC = temp + noise(0.15f);
     rd.humidity = 91 + noise(2);
     rd.waterCm = max(0.0f, water + noise(0.15f));
     rd.mq3 = (int)(gas + noise(8));
     rd.mq5Trip = t >= 178 && t < 205;
-    rd.wet = rd.waterCm > 3.0f;
+    rd.wet = false;             // no soil probe fitted
   }
   rd.distanceCm = cfg.holdDepth - rd.waterCm;
 }
@@ -237,7 +239,7 @@ void evaluate() {
   if (rd.dhtOk && rd.tempC > 0) score -= rd.tempC * 6;
   if (rd.usOk && rd.waterCm > cfg.waterWarn) score -= (rd.waterCm - cfg.waterWarn) * 10;
   if (rd.wet) score -= 8;
-  if (!warmingUp && rd.mq3Ok && rd.mq3 > 220) score -= (rd.mq3 - 220) / 7.0f;
+  if (!warmingUp && rd.mq3Ok && rd.mq3 > MQ3_CLEAN_ADC) score -= (rd.mq3 - MQ3_CLEAN_ADC) / 7.0f;
   if (!warmingUp && rd.mq5Trip) score -= 25;
   freshness = constrain((int)lroundf(score), 0, 100);
   grade = freshness >= 80 ? "FRESH" : freshness >= 60 ? "GOOD" : freshness >= 40 ? "CHECK" : "SPOILED";
@@ -262,9 +264,8 @@ uint8_t flipSeg(uint8_t s) {   // rotate one digit 180 degrees: a<->d, b<->e, c<
          ((s & 0x10) >> 3) | ((s & 0x04) << 3) | ((s & 0x20) >> 3);
 }
 
-void tmShow(const char *txt) {
-  uint8_t s[4];
-  for (uint8_t i = 0; i < 4; i++) s[i] = glyph(txt[i] ? txt[i] : ' ');
+// Raw segments for the 4 digits as the viewer reads them (left to right)
+void tmRaw(const uint8_t *s) {
   if (cfg.flip) {
     uint8_t f[4] = { flipSeg(s[3]), flipSeg(s[2]), flipSeg(s[1]), flipSeg(s[0]) };
     tm.setSegments(f);
@@ -273,55 +274,147 @@ void tmShow(const char *txt) {
   }
 }
 
+void textSegs(const char *txt, uint8_t *s) {
+  bool end = false;
+  for (uint8_t i = 0; i < 4; i++) { if (!txt[i]) end = true; s[i] = end ? 0 : glyph(txt[i]); }
+}
+
+void tmShow(const char *txt) {
+  uint8_t s[4];
+  textSegs(txt, s);
+  tmRaw(s);
+}
+
+// ------------------------------------------------------------------ TM1637 animations
+// Segment bits: a=0x01 top, b=0x02, c=0x04, d=0x08 bottom, e=0x10, f=0x20, g=0x40 middle
+
+// Boot: a light runs twice round the outside edge, then a segment test,
+// then FISH slides in from the right and the brightness swells.
+void bootAnimation() {
+  struct Step { uint8_t digit, seg; };
+  const Step path[12] = { {0,0x01},{1,0x01},{2,0x01},{3,0x01},{3,0x02},{3,0x04},
+                          {3,0x08},{2,0x08},{1,0x08},{0,0x08},{0,0x10},{0,0x20} };
+  for (uint8_t i = 0; i < 24; i++) {
+    uint8_t s[4] = {0, 0, 0, 0};
+    for (uint8_t k = 0; k < 4; k++) {               // head plus a 3-segment tail
+      const Step &p = path[(i + 12 - k) % 12];
+      s[p.digit] |= p.seg;
+    }
+    tmRaw(s);
+    delay(45);
+  }
+  const uint8_t all[4] = {0x7F, 0x7F, 0x7F, 0x7F}; // every segment on: shows a dead segment
+  tmRaw(all); delay(400);
+  const char *msg = "    FISH";
+  for (uint8_t i = 0; i <= 4; i++) { tmShow(msg + i); delay(130); }
+  for (uint8_t b = 0; b <= TM_BRIGHTNESS; b++) { tm.setBrightness(b, true); tmShow("FISH"); delay(60); }
+  delay(500);
+}
+
+// Water ripple across the display, played once per summary cycle when all is well
+bool rippleFrame(uint32_t t) {          // t = ms since the ripple started; false when done
+  const uint8_t wave[4] = {0x08, 0x40, 0x01, 0x40};   // low, mid, high, mid
+  uint8_t frame = t / 70;
+  if (frame >= 12) return false;
+  uint8_t s[4];
+  for (uint8_t i = 0; i < 4; i++) s[i] = wave[(frame + 4 - i) % 4] | (i <= frame / 3 ? 0x08 : 0);
+  tmRaw(s);
+  return true;
+}
+
+// Warm-up: spinning segment on the left, seconds left on the right
+void warmupFrame(uint32_t ms) {
+  const uint8_t spin[6] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20};
+  int left = max(0, (int)(GAS_WARMUP_S - uptimeS()));
+  char num[5];
+  snprintf(num, sizeof num, " %3d", left);
+  uint8_t s[4];
+  textSegs(num, s);
+  s[0] = spin[(ms / 90) % 6];
+  tmRaw(s);
+}
+
 void fmtTemp(char *b)  { if (!rd.dhtOk) { strcpy(b, "E-dH"); return; }
                          int t = lroundf(rd.tempC); t = constrain(t, -9, 99);
                          snprintf(b, 5, "%2d*C", t); }
 void fmtWater(char *b) { if (!rd.usOk) { strcpy(b, "E-US"); return; }
                          snprintf(b, 5, "H%3d", constrain((int)lroundf(rd.waterCm), 0, 999)); }
-void fmtGas(char *b)   { if (!rd.mq3Ok) { strcpy(b, "E-AL"); return; }
-                         snprintf(b, 5, "AL%2d", constrain(rd.mq3 * 100 / 1024, 0, 99)); }
+void fmtGas(char *b)   { if (!rd.mq3Ok) { strcpy(b, "E-nH"); return; }
+                         snprintf(b, 5, "nH%2d", constrain(rd.mq3 * 100 / 1024, 0, 99)); }
 void fmtScore(char *b) { if (freshness >= 100) strcpy(b, "F100"); else snprintf(b, 5, "Fr%2d", freshness); }
 
 // Normal: rotating summary. Abnormal: flash each fault code, then its value.
 void updateDisplay() {
   static uint32_t lastDraw = 0;
-  if (millis() - lastDraw < 100) return;
+  if (millis() - lastDraw < 40) return;
   lastDraw = millis();
   uint32_t ms = millis();
   char b[6];
 
   if (warmingUp && !(alerts & ~AL_SENSOR)) {
-    if ((ms / 1500) % 2) strcpy(b, "PrE ");
-    else snprintf(b, 5, "%4d", (int)(GAS_WARMUP_S - uptimeS()));
-    tmShow(b); return;
+    if ((ms % 3000) >= 2200) tmShow("PrE ");
+    else warmupFrame(ms);
+    return;
   }
+
+  // Summary pages slide in from the right; a ripple plays before each new cycle
+  static int8_t page = -1;
+  static char shown[5] = "    ";
+  static uint32_t pageStart = 0;
+  static bool rippling = false;
 
   uint16_t faults = alerts;
   if (!faults) {
-    switch ((ms / TM_PAGE_MS) % 4) {
+    int8_t p = (ms / TM_PAGE_MS) % 4;
+    if (p != page) {
+      rippling = (p == 0 && page != -1);
+      page = p;
+      pageStart = ms;
+    }
+    if (rippling) {
+      if (rippleFrame(ms - pageStart)) return;
+      rippling = false;
+      pageStart = ms;
+    }
+    switch (page) {
       case 0: fmtTemp(b); break;
       case 1: fmtWater(b); break;
       case 2: fmtGas(b); break;
       default: fmtScore(b); break;
     }
-    tmShow(b); return;
+    uint8_t step = (ms - pageStart) / 60;
+    if (step < 4) {                    // slide: old text moves left, new text follows
+      char win[9];
+      snprintf(win, sizeof win, "%-4.4s%-4.4s", shown, b);
+      tmShow(win + step + 1);
+      return;
+    }
+    tmShow(b);
+    memcpy(shown, b, 4);
+    return;
   }
+  page = -1;                           // after an alarm, the summary restarts without a slide
 
   uint8_t list[5], n = 0;
   for (uint8_t i = 0; i < 5; i++) if (faults & (1 << i)) list[n++] = i;
   uint32_t slot = ms / 1200;
   uint8_t which = list[(slot / 2) % n];
   bool showValue = slot % 2;
-  bool lit = (ms % 500) < 330;   // flash
+  bool lit = which == 4 || (ms % 500) < 330;   // flash alarms; sensor codes stay steady to read
   if (!lit) { tmShow("    "); return; }
   switch (which) {
     case 0: if (showValue) fmtTemp(b);  else strcpy(b, "ICE "); break;
     case 1: if (showValue) fmtWater(b); else strcpy(b, "drAn"); break;
-    case 2: if (showValue) fmtGas(b);   else strcpy(b, "ALCO"); break;
-    case 3: if (showValue) strcpy(b, "GAS "); else strcpy(b, "rOt "); break;
-    default:
-      if (!rd.dhtOk) fmtTemp(b); else if (!rd.usOk) fmtWater(b); else fmtGas(b);
+    case 2: if (showValue) fmtGas(b);   else strcpy(b, "nH3 "); break;
+    case 3: if (showValue) strcpy(b, "GAS "); else strcpy(b, "CH4 "); break;
+    default: {                         // cycle through every sensor that isn't answering
+      const char *missing[3]; uint8_t m = 0;
+      if (!rd.dhtOk) missing[m++] = "E-dH";
+      if (!rd.usOk)  missing[m++] = "E-US";
+      if (!rd.mq3Ok) missing[m++] = "E-nH";
+      strcpy(b, m ? missing[(ms / 1500) % m] : "    ");
       break;
+    }
   }
   tmShow(b);
 }
@@ -493,10 +586,13 @@ void handleCaptive() {   // phones probing for internet land on the dashboard
 
 // ------------------------------------------------------------------ setup / loop
 void printSerial() {
-  Serial.printf("[%s] T=%s H=%s water=%s cm wet=%d MQ3=%d MQ5=%d score=%d %s alerts=0x%02X\n",
+  Serial.printf("[%s] T=%s H=%s water=%s cm wet=%d MQ135=%d MQ4=%d score=%d %s alerts=0x%02X\n",
     cfg.simulator ? "SIM" : "LIVE",
     rd.dhtOk ? String(rd.tempC, 1).c_str() : "--", rd.dhtOk ? String(rd.humidity, 0).c_str() : "--",
     rd.usOk ? String(rd.waterCm, 1).c_str() : "--", rd.wet, rd.mq3, rd.mq5Trip, freshness, grade, alerts);
+  // Raw pin levels for wiring checks: a wired DHT11 holds D4 HIGH between reads
+  Serial.printf("       pins: A0(MQ-135)=%d D1(MQ-4 DO)=%d D8(ECHO)=%d\n",
+    analogRead(PIN_MQ3_AO), digitalRead(PIN_MQ5_DO), digitalRead(PIN_US_ECHO));
 }
 
 void setup() {
@@ -507,12 +603,11 @@ void setup() {
   pinMode(PIN_US_TRIG, OUTPUT);  digitalWrite(PIN_US_TRIG, LOW);
   pinMode(PIN_US_ECHO, INPUT);
   pinMode(PIN_MQ5_DO, INPUT_PULLUP);
-  pinMode(PIN_SOIL_DO, INPUT_PULLUP);
   randomSeed(ESP.getChipId() ^ micros());
 
   loadSettings();
   tm.setBrightness(TM_BRIGHTNESS, true);
-  tmShow("FISH");
+  bootAnimation();
   dht.begin();
   fsOk = LittleFS.begin();
 
@@ -534,7 +629,6 @@ void setup() {
 
   Serial.printf("\nFish Quality Monitor - hotspot \"%s\" (open) -> http://192.168.4.1  mode=%s  log=%s\n",
                 AP_SSID, cfg.simulator ? "SIMULATOR" : "LIVE", fsOk ? "LittleFS ok" : "no filesystem");
-  delay(900);
   if (cfg.simulator) { tmShow("SIn "); delay(700); }
 }
 

@@ -43,6 +43,65 @@ def cmd_ports(_args) -> int:
     return 0
 
 
+def cmd_linktest(args) -> int:
+    """Talk to the car through the gateway and report the link quality.
+    With --wheels, each wheel is pulsed forward and back at low power."""
+    import statistics
+    import time
+    from markerpilot.comm.links import SerialGatewayLink
+    link = SerialGatewayLink(args.port or "")
+    if not link.connect():
+        print(link.messages.get())
+        return 1
+    link.set_guard(args.guard)
+    print(f"Gateway on {link.port}. Listening for {args.seconds:.0f} s (motors stopped)...")
+    samples, t0 = [], time.time()
+    while time.time() - t0 < args.seconds:
+        link.send(0, 0)
+        t = link.telemetry
+        if t is not None and (not samples or t.stamp != samples[-1].stamp):
+            samples.append(t)
+        time.sleep(0.05)
+    while not link.messages.empty():
+        print("  " + link.messages.get())
+    if not samples:
+        print("NO TELEMETRY: the gateway can't hear the car. Is the car powered and flashed?")
+        link.close()
+        return 1
+    last, s = samples[-1], link.status
+    print(f"Telemetry  {link.rx_count / args.seconds:5.1f} Hz" + (f", loss {s.loss_pct}%, channel {s.channel}" if s else ""))
+    if last.car_rssi is not None:
+        rtts = [x.rtt_ms for x in samples if x.rtt_ms]
+        print(f"Signal     car hears {last.car_rssi} dBm, gateway hears {last.gw_rssi} dBm")
+        if rtts:
+            print(f"Latency    {statistics.median(rtts):.0f} ms median (command -> acknowledged)")
+    else:
+        print("Car runs v1 firmware: no signal / latency data. Flash the v2 firmware for more.")
+    for name, i in (("left", 0), ("front", 1), ("right", 2)):
+        v = [x.sonar[i] for x in samples]
+        fault = " FAULT (no echo pulse at all)" if name in last.sonar_faults else ""
+        print(f"Sonar {name:5s} {min(v):5.0f} / {statistics.median(v):5.0f} / {max(v):5.0f} cm (min/median/max){fault}")
+    print("Battery    " + (f"{last.battery_v:.2f} V" if last.battery_v > 0 else "not measured"))
+
+    if args.wheels:
+        print("Wheel test: lift the car so the wheels spin freely.")
+        link.beep()
+        time.sleep(1.5)
+        for name, l, r in (("left forward", 1, 0), ("left back", -1, 0), ("right forward", 0, 1), ("right back", 0, -1)):
+            seen, t0 = [], time.time()
+            while time.time() - t0 < 0.8:
+                link.send(l * args.pwm, r * args.pwm)
+                if link.telemetry and link.telemetry.pwm:
+                    seen.append(link.telemetry.pwm)
+                time.sleep(0.04)
+            link.send(0, 0)
+            peak = max(seen, key=lambda p: abs(p[0]) + abs(p[1])) if seen else None
+            print(f"  {name:13s} commanded {l * args.pwm:+4d},{r * args.pwm:+4d}  car applied {peak if peak else 'n/a'}")
+            time.sleep(0.4)
+    link.close()
+    return 0
+
+
 def cmd_markers(args) -> int:
     import cv2
     import numpy as np
@@ -176,6 +235,11 @@ def main() -> None:
     sub.add_parser("gui", help="open the app (default)")
     sub.add_parser("cameras", help="list cameras")
     sub.add_parser("ports", help="list serial ports")
+    lt = sub.add_parser("linktest", help="check the radio link to the car through the gateway")
+    lt.add_argument("--seconds", type=float, default=8.0)
+    lt.add_argument("--guard", type=int, default=12, help="car's front collision guard in cm, 0 = off")
+    lt.add_argument("--wheels", action="store_true", help="also pulse each wheel (lift the car first)")
+    lt.add_argument("--pwm", type=int, default=150, help="wheel test power 0-255")
     m = sub.add_parser("markers", help="generate printable markers")
     m.add_argument("--ids", type=int, nargs="+", default=[0, 1, 2, 3])
     m.add_argument("--size-cm", type=float, default=5.0)
@@ -193,7 +257,7 @@ def main() -> None:
     e.add_argument("--episodes", type=int, default=200)
     args = p.parse_args()
 
-    handlers = {"cameras": cmd_cameras, "ports": cmd_ports, "markers": cmd_markers,
+    handlers = {"cameras": cmd_cameras, "ports": cmd_ports, "linktest": cmd_linktest, "markers": cmd_markers,
                 "selftest": cmd_selftest, "train": cmd_train, "evaluate": cmd_evaluate}
     if args.cmd in handlers:
         logging.getLogger().setLevel(logging.WARNING)

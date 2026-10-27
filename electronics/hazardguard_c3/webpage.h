@@ -68,26 +68,30 @@ footer{text-align:center;color:var(--muted);font-size:.72rem;padding:16px}
   <div id="banner"><div><b id="bTitle">CONNECTING</b><span id="bText">Waiting for the controller…</span></div>
     <div class="lights"><span class="lamp g" id="lg"></span><span class="lamp y" id="ly"></span><span class="lamp r" id="lr"></span></div></div>
 
-  <div class="gauges">
-    <div class="panel gauge" id="gGas"><h3>Gas / smoke (MQ)</h3><svg viewBox="0 0 200 120"><path d="M20 110 A80 80 0 0 1 180 110" stroke="#2e2924" stroke-width="16" fill="none" stroke-linecap="round"/><path id="aGas" d="M20 110 A80 80 0 0 1 180 110" stroke="#22c55e" stroke-width="16" fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/></svg><div class="num" id="vGas">—</div><div class="unit">ADC (0-4095)</div><span class="state" id="sGas">—</span><svg class="spark" viewBox="0 0 59 34" preserveAspectRatio="none"><polyline id="pGas"/></svg></div>
-    <div class="panel gauge" id="gTemp"><h3>Temperature (DHT11)</h3><svg viewBox="0 0 200 120"><path d="M20 110 A80 80 0 0 1 180 110" stroke="#2e2924" stroke-width="16" fill="none" stroke-linecap="round"/><path id="aTemp" d="M20 110 A80 80 0 0 1 180 110" stroke="#22c55e" stroke-width="16" fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/></svg><div class="num" id="vTemp">—</div><div class="unit" id="uTemp">°C</div><span class="state" id="sTemp">—</span><svg class="spark" viewBox="0 0 59 34" preserveAspectRatio="none"><polyline id="pTemp"/></svg></div>
-    <div class="panel gauge" id="gDist"><h3>Distance (ultrasonic)</h3><svg viewBox="0 0 200 120"><path d="M20 110 A80 80 0 0 1 180 110" stroke="#2e2924" stroke-width="16" fill="none" stroke-linecap="round"/><path id="aDist" d="M20 110 A80 80 0 0 1 180 110" stroke="#22c55e" stroke-width="16" fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/></svg><div class="num" id="vDist">—</div><div class="unit">cm</div><span class="state" id="sDist">—</span><svg class="spark" viewBox="0 0 59 34" preserveAspectRatio="none"><polyline id="pDist"/></svg></div>
+  <div class="gauges" id="gauges">
   </div>
+  <div class="panel sub" id="faults" hidden></div>
 
   <div class="panel">
     <div class="row"><span class="label">Profile</span><div class="seg" id="profiles"><button data-p="0">Household</button><button data-p="1">Hotel kitchen</button><button data-p="2">Industrial</button></div></div>
-    <div class="row"><span class="label">Relay</span><div class="seg" id="relay"><button data-m="auto">Auto</button><button data-m="on">Force ON</button><button data-m="off">Force OFF</button></div><span class="sub" id="relayState"></span></div>
-    <div class="row"><span class="label">Alarm</span><button class="big" id="mute">Silence buzzer</button><button class="big" id="siren">Phone siren: off</button></div>
+    <div class="row"><span class="label">Alarm</span><button class="big" id="siren">Phone siren: off</button></div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><span class="label">LED test</span><div class="seg" id="ledtest"><button data-l="1">Green</button><button data-l="2">Yellow</button><button data-l="4">Red</button><button data-l="7">All on</button><button data-l="8">Cycle</button></div><button class="big" id="ledstop">Stop test</button></div>
+    <div class="row"><span class="sub" id="ledState">Tap a colour to light that LED on the box. The test ends by itself after 60 s.</span></div>
   </div>
 
   <div class="panel">
     <div class="th">
-      <div><label>Gas warning (ADC)</label><input id="tGasWarn" type="number"></div>
-      <div><label>Gas danger (ADC)</label><input id="tGasAlarm" type="number"></div>
+      <div><label>LPG MQ-5 warning (ADC)</label><input id="tMq5Warn" type="number"></div>
+      <div><label>LPG MQ-5 danger (ADC)</label><input id="tMq5Alarm" type="number"></div>
+      <div><label>Alcohol MQ-3 warning (ADC)</label><input id="tMq3Warn" type="number"></div>
+      <div><label>Alcohol MQ-3 danger (ADC)</label><input id="tMq3Alarm" type="number"></div>
       <div><label>Temp warning (°C)</label><input id="tTempWarn" type="number" step="0.5"></div>
       <div><label>Temp danger (°C)</label><input id="tTempAlarm" type="number" step="0.5"></div>
-      <div><label>Danger zone (cm)</label><input id="tBreach" type="number"></div>
-      <div><label>Tank overflow (cm)</label><input id="tTank" type="number"></div>
+      <div><label>Moisture warning (%)</label><input id="tSoilWarn" type="number"></div>
+      <div><label>Moisture danger (%)</label><input id="tSoilAlarm" type="number"></div>
     </div>
     <div class="row"><button class="big" id="save" style="background:var(--accent);color:#1a0d00">Save thresholds</button><span class="sub" id="saved"></span></div>
   </div>
@@ -96,7 +100,11 @@ footer{text-align:center;color:var(--muted);font-size:.72rem;padding:16px}
 <script>
 const $=id=>document.getElementById(id);
 const LBL=['SAFE','WARNING','DANGER'];
-const hist={Gas:[],Temp:[],Dist:[]};
+const GAUGES=[['Mq5','LPG / gas (MQ-5)','ADC (0-4095)'],['Mq3','Alcohol / solvent (MQ-3)','ADC (0-4095)'],
+  ['Temp','Temperature (DHT11)','°C'],['Soil','Water / moisture (soil probe)','% wet']];
+const hist={};
+GAUGES.forEach(([id,title,unit])=>{hist[id]=[];$('gauges').insertAdjacentHTML('beforeend',
+  `<div class="panel gauge" id="g${id}"><h3>${title}</h3><svg viewBox="0 0 200 120"><path d="M20 110 A80 80 0 0 1 180 110" stroke="#2e2924" stroke-width="16" fill="none" stroke-linecap="round"/><path id="a${id}" d="M20 110 A80 80 0 0 1 180 110" stroke="#22c55e" stroke-width="16" fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/></svg><div class="num" id="v${id}">—</div><div class="unit" id="u${id}">${unit}</div><span class="state" id="s${id}">—</span><svg class="spark" viewBox="0 0 59 34" preserveAspectRatio="none"><polyline id="p${id}"/></svg></div>`);});
 let editing=false,siren=false,audio=null,osc=null,last=null,fails=0;
 document.querySelectorAll('.th input').forEach(i=>{i.onfocus=()=>editing=true;});
 
@@ -115,16 +123,20 @@ function render(d){
   $('bTitle').textContent=d.warmup>0&&!d.level?`WARMING UP · ${d.warmup}s`:LBL[d.level];$('bText').textContent=d.hazards;
   $('lg').className='lamp g'+(d.leds.g?' on':'');$('ly').className='lamp y'+(d.leds.y?' on':'');$('lr').className='lamp r'+(d.leds.r?' on':'');
   const f=d.flags,t=d.th;
-  gauge('Gas',d.gas,d.gas/4095,f.gasAlarm?2:f.gasWarn?1:0,d.warmup>0?'WARMING':null);
+  const wl=d.warmup>0?'WARMING':null;
+  gauge('Mq5',d.mq5,d.mq5/4095,f.mq5Alarm?2:f.mq5Warn?1:0,wl);
+  gauge('Mq3',d.mq3,d.mq3/4095,f.mq3Alarm?2:f.mq3Warn?1:0,wl);
   gauge('Temp',d.temp,d.temp===null?0:d.temp/80,f.tempAlarm?2:f.tempWarn?1:0);
   $('uTemp').textContent=d.hum===null?'°C':`°C · humidity ${d.hum}%`;
-  gauge('Dist',d.dist,d.dist===null?0:1-Math.min(d.dist,200)/200,(f.overflow||f.breach)?2:0,f.overflow?'OVERFLOW':f.breach?'BREACH':null);
+  gauge('Soil',d.soil,d.soil===null?0:d.soil/100,f.soilAlarm?2:f.soilWarn?1:0);
+  $('uSoil').textContent=`% wet · raw ${d.soilRaw}`;
+  $('faults').hidden=!d.faults;$('faults').textContent=d.faults?'Not connected or not answering: '+d.faults:'';
   document.querySelectorAll('#profiles button').forEach(x=>x.classList.toggle('on',+x.dataset.p===d.profile));
-  document.querySelectorAll('#relay button').forEach(x=>x.classList.toggle('on',x.dataset.m===d.relayMode));
-  $('relayState').textContent=d.relay?'Relay is ON (fan / valve active)':'Relay is off';
-  $('mute').textContent=d.mute>0?`Muted ${d.mute}s - tap to unmute`:'Silence buzzer';$('mute').className='big'+(d.mute>0?' alert':'');
-  if(!editing){$('tGasWarn').value=t.gasWarn;$('tGasAlarm').value=t.gasAlarm;$('tTempWarn').value=t.tempWarn;
-    $('tTempAlarm').value=t.tempAlarm;$('tBreach').value=t.distBreach;$('tTank').value=t.tankOverflow;}
+  document.querySelectorAll('#ledtest button').forEach(x=>x.classList.toggle('on',+x.dataset.l===d.ledTest));
+  $('ledstop').className='big'+(d.ledTest?' alert':'');
+  $('ledState').textContent=d.ledTest?'LED test running: the lights above show what the box should show.':'Tap a colour to light that LED on the box. The test ends by itself after 60 s.';
+  if(!editing){$('tMq5Warn').value=t.mq5Warn;$('tMq5Alarm').value=t.mq5Alarm;$('tMq3Warn').value=t.mq3Warn;$('tMq3Alarm').value=t.mq3Alarm;
+    $('tTempWarn').value=t.tempWarn;$('tTempAlarm').value=t.tempAlarm;$('tSoilWarn').value=t.soilWarn;$('tSoilAlarm').value=t.soilAlarm;}
   sound(d.level==2&&siren);
 }
 function sound(on){
@@ -140,11 +152,13 @@ async function poll(){
   setTimeout(poll,800);
 }
 document.querySelectorAll('#profiles button').forEach(b=>b.onclick=()=>{editing=false;api('/api/profile?p='+b.dataset.p)});
-document.querySelectorAll('#relay button').forEach(b=>b.onclick=()=>api('/api/relay?mode='+b.dataset.m));
-$('mute').onclick=()=>api('/api/mute?on='+(last&&last.mute>0?0:1));
+document.querySelectorAll('#ledtest button').forEach(b=>b.onclick=()=>api('/api/ledtest?leds='+b.dataset.l));
+$('ledstop').onclick=()=>api('/api/ledtest?leds=0');
 $('siren').onclick=()=>{audio=audio||new (window.AudioContext||window.webkitAudioContext)();siren=!siren;
   $('siren').textContent='Phone siren: '+(siren?'on':'off');$('siren').className='big'+(siren?' alert':'');if(!siren)sound(false);};
-$('save').onclick=async()=>{editing=false;await api(`/api/thresholds?gasWarn=${$('tGasWarn').value}&gasAlarm=${$('tGasAlarm').value}&tempWarn=${$('tTempWarn').value}&tempAlarm=${$('tTempAlarm').value}&distBreach=${$('tBreach').value}&tank=${$('tTank').value}`);
+$('save').onclick=async()=>{editing=false;const q=['Mq5Warn','Mq5Alarm','Mq3Warn','Mq3Alarm','TempWarn','TempAlarm','SoilWarn','SoilAlarm']
+    .map(k=>k[0].toLowerCase()+k.slice(1)+'='+encodeURIComponent($('t'+k).value)).join('&');
+  await api('/api/thresholds?'+q);
   $('saved').textContent='Saved to the controller ✓';setTimeout(()=>$('saved').textContent='',2500);};
 poll();
 </script>

@@ -56,6 +56,7 @@ class LinkConfig:
     baudrate: int = 115200
     send_hz: float = 20.0
     timeout_s: float = 1.0
+    guard_cm: int = 12              # car's own front-sonar stop (v2 firmware), 0 = off
 
 
 @dataclass

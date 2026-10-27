@@ -72,7 +72,9 @@ class Engine:
         self._new_target()
 
     def clear_path(self) -> None:
+        """Remove the clicked waypoints and the drawn trail of where the car has been."""
         self.waypoints.clear()
+        self.trail.clear()
         self._new_target()
 
     def set_estop(self, on: bool) -> None:

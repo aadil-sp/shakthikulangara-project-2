@@ -1,19 +1,18 @@
 /*
  * =============================================================================
- * HazardGuard C3 - Multi-hazard emergency & safety automation
- * ESP32-C3 · MQ gas · DHT11 · HC-SR04 · relay · buzzer · 3 LEDs · TM1637
+ * HazardGuard C3 - Multi-hazard alarm
+ * ESP32-C3 · MQ-5 · MQ-3 · DHT11 · soil moisture · 3 LEDs
  * Hotspot "HazardGuard-C3" -> http://192.168.4.1
  * =============================================================================
  * What it does
- *  - Gas leak / smoke (MQ sensor), overheat / fire (DHT11), danger-zone breach
- *    and tank overflow (ultrasonic) are checked against the active profile
- *    (Household, Hotel kitchen, Industrial).
- *  - Safe: green LED. Warning: yellow blink + slow beep. Danger: red strobe,
- *    fast beep, relay ON (exhaust fan / gas valve), code flashing on TM1637.
- *  - The relay stays on RELAY_HOLD_S after the hazard clears, so a fan does
- *    not chatter on and off around the threshold.
+ *  - LPG / gas leak (MQ-5), alcohol / solvent vapour (MQ-3), overheat / fire
+ *    (DHT11) and water leak / flooding (soil probe) are checked against the
+ *    active profile (Household, Hotel kitchen, Industrial).
+ *  - Safe: green LED. Warning: yellow blink. Danger: red strobe.
  *  - Sensors that stop answering are reported as faults, never as fake values.
  *  - Profile and thresholds can be changed from the dashboard and are saved.
+ *  - LED test: green-yellow-red sweep at power-up, and test buttons on the
+ *    dashboard.
  * =============================================================================
  */
 
@@ -23,112 +22,137 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
-#include <TM1637Display.h>
 #include <DHT.h>
+#include <driver/gpio.h>
 
 #include "config.h"
 #include "webpage.h"
 
-TM1637Display display(PIN_TM_CLK, PIN_TM_DIO);
 DHT dht(PIN_DHT, DHT_TYPE);
 WebServer server(80);
 DNSServer dns;
 Preferences prefs;
 const IPAddress AP_IP(192, 168, 4, 1);
 
-// 7-segment words
-const uint8_t W_SAFE[] = {SEG_A | SEG_C | SEG_D | SEG_F | SEG_G, SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,
-                          SEG_A | SEG_E | SEG_F | SEG_G, SEG_A | SEG_D | SEG_E | SEG_F | SEG_G};
-const uint8_t W_GAS[]  = {SEG_A | SEG_C | SEG_D | SEG_E | SEG_F, SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,
-                          SEG_A | SEG_C | SEG_D | SEG_F | SEG_G, 0};
-const uint8_t W_FIRE[] = {SEG_A | SEG_E | SEG_F | SEG_G, SEG_B | SEG_C, SEG_E | SEG_G, SEG_A | SEG_D | SEG_E | SEG_F | SEG_G};
-const uint8_t W_ZONE[] = {SEG_A | SEG_B | SEG_D | SEG_E | SEG_G, SEG_C | SEG_D | SEG_E | SEG_G,
-                          SEG_C | SEG_E | SEG_G, SEG_A | SEG_D | SEG_E | SEG_F | SEG_G};               // "Zone"
-const uint8_t W_FULL[] = {SEG_A | SEG_E | SEG_F | SEG_G, SEG_C | SEG_D | SEG_E,
-                          SEG_D | SEG_E | SEG_F, SEG_D | SEG_E | SEG_F};                               // "FuLL"
-const uint8_t W_WARM[] = {SEG_D | SEG_E | SEG_F | SEG_G, SEG_D | SEG_E | SEG_F | SEG_G,
-                          SEG_D | SEG_E | SEG_F | SEG_G, SEG_D | SEG_E | SEG_F | SEG_G};               // "tttt" warming
-const uint8_t W_DEG_C[] = {SEG_A | SEG_B | SEG_F | SEG_G, SEG_A | SEG_D | SEG_E | SEG_F};
-
 // ------------------------------------------------------------------ state
 int        profile = 0;
 Thresholds th = PROFILES[0];
 
-int   gasRaw = 0;
-int   gasHist[GAS_AVG_SAMPLES];
-int   gasIdx = 0;
+// Moving average of one analog pin
+struct Analog {
+  uint8_t pin;
+  int     hist[AVG_SAMPLES];
+  int     idx;
+  int     value;
+  void begin() {
+    int v = analogRead(pin);
+    for (int i = 0; i < AVG_SAMPLES; i++) hist[i] = v;
+    value = v;
+  }
+  void read() {
+    hist[idx] = analogRead(pin);
+    idx = (idx + 1) % AVG_SAMPLES;
+    long sum = 0;
+    for (int i = 0; i < AVG_SAMPLES; i++) sum += hist[i];
+    value = sum / AVG_SAMPLES;
+  }
+  // An unplugged pin floats and reads random mid-range values, so a low
+  // reading alone can't catch it. With the internal pull-down and then the
+  // pull-up (~45k) switched on, a floating pin swings rail to rail, while a
+  // wired sensor output (~10k or less) only moves a few hundred counts.
+  int  readPulled(bool up) {
+    gpio_num_t g = (gpio_num_t)pin;
+    if (up) { gpio_pulldown_dis(g); gpio_pullup_en(g); }
+    else    { gpio_pullup_dis(g); gpio_pulldown_en(g); }
+    delay(1);
+    int v = analogRead(pin);
+    gpio_pullup_dis(g);
+    gpio_pulldown_dis(g);
+    return v;
+  }
+  int  floatScore;               // 0..4, hysteresis so the state doesn't flicker
+  bool wired = true;
+  int  swing;                    // last pull-up minus pull-down reading (shown in the log)
+  bool connected() {
+    swing = readPulled(true) - readPulled(false);
+    bool floating = swing > FLOAT_SWING_RAW;
+    floatScore = constrain(floatScore + (floating ? 1 : -1), 0, 4);
+    if (floatScore >= 3) wired = false;
+    if (floatScore <= 1) wired = true;
+    return wired;
+  }
+};
+
+Analog mq5  = {PIN_MQ5};
+Analog mq3  = {PIN_MQ3};
+Analog soil = {PIN_SOIL};
+bool  mq5Ok = false, mq3Ok = false, soilOk = false;
+int   soilPct = 0;
 float temp = 0, hum = 0;
 bool  dhtOk = false;
 int   dhtFails = 3;
-int   dist = 0;
-bool  distOk = false;
-int   usFails = 4;
-
-enum RelayMode { RELAY_AUTO, RELAY_FORCE_ON, RELAY_FORCE_OFF };
-RelayMode relayMode = RELAY_AUTO;
-bool  relayOn = false;
-unsigned long relayHoldUntil = 0;
-unsigned long muteUntil = 0;
 
 int    level = 0;               // 0 safe, 1 warning, 2 danger
-bool   gasWarnF, gasAlarmF, tempWarnF, tempAlarmF, breachF, overflowF;
+bool   mq5WarnF, mq5AlarmF, mq3WarnF, mq3AlarmF, tempWarnF, tempAlarmF, soilWarnF, soilAlarmF;
 String hazards = "Starting";
+String faults = "";
 
-unsigned long lastSensor = 0, lastDht = 0, lastDisplay = 0, lastLog = 0;
-int displayStep = 0;
+unsigned long lastSensor = 0, lastDht = 0, lastLog = 0;
+
+// LED test from the dashboard: bit mask of LEDs held on, or LT_CYCLE
+enum { LT_G = 1, LT_Y = 2, LT_R = 4, LT_CYCLE = 8 };
+uint8_t ledTest = 0;
+unsigned long ledTestUntil = 0;
+bool ledG = false, ledY = false, ledR = false;   // what the LEDs are showing right now
 
 bool warmingUp() { return millis() < GAS_WARMUP_S * 1000UL; }
 
 // ------------------------------------------------------------------ settings
 void loadSettings() {
-  prefs.begin("hazardguard", true);
+  prefs.begin("hazardguard2", true);
   profile = constrain(prefs.getInt("profile", 0), 0, 2);
   th = PROFILES[profile];
-  th.gasWarn      = prefs.getInt("gasWarn", th.gasWarn);
-  th.gasAlarm     = prefs.getInt("gasAlarm", th.gasAlarm);
-  th.tempWarn     = prefs.getFloat("tempWarn", th.tempWarn);
-  th.tempAlarm    = prefs.getFloat("tempAlarm", th.tempAlarm);
-  th.distBreach   = prefs.getInt("distBreach", th.distBreach);
-  th.tankOverflow = prefs.getInt("tank", th.tankOverflow);
+  th.mq5Warn   = prefs.getInt("mq5Warn", th.mq5Warn);
+  th.mq5Alarm  = prefs.getInt("mq5Alarm", th.mq5Alarm);
+  th.mq3Warn   = prefs.getInt("mq3Warn", th.mq3Warn);
+  th.mq3Alarm  = prefs.getInt("mq3Alarm", th.mq3Alarm);
+  th.tempWarn  = prefs.getFloat("tempWarn", th.tempWarn);
+  th.tempAlarm = prefs.getFloat("tempAlarm", th.tempAlarm);
+  th.soilWarn  = prefs.getInt("soilWarn", th.soilWarn);
+  th.soilAlarm = prefs.getInt("soilAlarm", th.soilAlarm);
   prefs.end();
 }
 
 void saveSettings() {
-  prefs.begin("hazardguard", false);
+  prefs.begin("hazardguard2", false);
   prefs.putInt("profile", profile);
-  prefs.putInt("gasWarn", th.gasWarn);
-  prefs.putInt("gasAlarm", th.gasAlarm);
+  prefs.putInt("mq5Warn", th.mq5Warn);
+  prefs.putInt("mq5Alarm", th.mq5Alarm);
+  prefs.putInt("mq3Warn", th.mq3Warn);
+  prefs.putInt("mq3Alarm", th.mq3Alarm);
   prefs.putFloat("tempWarn", th.tempWarn);
   prefs.putFloat("tempAlarm", th.tempAlarm);
-  prefs.putInt("distBreach", th.distBreach);
-  prefs.putInt("tank", th.tankOverflow);
+  prefs.putInt("soilWarn", th.soilWarn);
+  prefs.putInt("soilAlarm", th.soilAlarm);
   prefs.end();
 }
 
 // ------------------------------------------------------------------ sensors
-void readGas() {
-  gasHist[gasIdx] = analogRead(PIN_GAS);
-  gasIdx = (gasIdx + 1) % GAS_AVG_SAMPLES;
-  long sum = 0;
-  for (int i = 0; i < GAS_AVG_SAMPLES; i++) sum += gasHist[i];
-  gasRaw = sum / GAS_AVG_SAMPLES;
-}
-
-void readUltrasonic() {
-  digitalWrite(PIN_US_TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(PIN_US_TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(PIN_US_TRIG, LOW);
-  long us = pulseIn(PIN_US_ECHO, HIGH, US_TIMEOUT_US);
-  int cm = (int)(us * 0.0343 / 2.0);
-  if (us == 0 || cm < 2 || cm > 400) {
-    if (usFails < 4) usFails++;
-  } else {
-    usFails = 0;
-    dist = cm;
+void readAnalogs() {
+  mq5.read();
+  mq3.read();
+  soil.read();
+  static uint8_t n = 0;
+  if (++n % 4 == 0) {            // pin check once a second
+    mq5.connected();
+    mq3.connected();
+    soil.connected();
   }
-  distOk = usFails < 4;
+  mq5Ok  = mq5.wired && mq5.value >= MQ_MISSING_RAW;
+  mq3Ok  = mq3.wired && mq3.value >= MQ_MISSING_RAW;
+  soilOk = soil.wired && soil.value >= SOIL_MISSING_RAW;
+  // Dry probe reads high, wet probe reads low
+  soilPct = constrain(map(soil.value, SOIL_DRY_RAW, SOIL_WET_RAW, 0, 100), 0, 100);
 }
 
 void readDht() {
@@ -146,106 +170,101 @@ void readDht() {
 // ------------------------------------------------------------------ logic
 void evaluate() {
   bool warm = warmingUp();
-  gasAlarmF  = !warm && gasRaw >= th.gasAlarm;
-  gasWarnF   = !warm && !gasAlarmF && gasRaw >= th.gasWarn;
+  mq5AlarmF  = !warm && mq5Ok && mq5.value >= th.mq5Alarm;
+  mq5WarnF   = !warm && mq5Ok && !mq5AlarmF && mq5.value >= th.mq5Warn;
+  mq3AlarmF  = !warm && mq3Ok && mq3.value >= th.mq3Alarm;
+  mq3WarnF   = !warm && mq3Ok && !mq3AlarmF && mq3.value >= th.mq3Warn;
   tempAlarmF = dhtOk && temp >= th.tempAlarm;
   tempWarnF  = dhtOk && !tempAlarmF && temp >= th.tempWarn;
-  overflowF  = distOk && dist <= th.tankOverflow;
-  breachF    = distOk && !overflowF && dist <= th.distBreach;
+  soilAlarmF = soilOk && soilPct >= th.soilAlarm;
+  soilWarnF  = soilOk && !soilAlarmF && soilPct >= th.soilWarn;
 
   String h = "";
-  if (gasAlarmF)  h += "GAS LEAK, ";
-  if (gasWarnF)   h += "Gas rising, ";
+  if (mq5AlarmF)  h += "LPG / GAS LEAK, ";
+  if (mq5WarnF)   h += "LPG rising, ";
+  if (mq3AlarmF)  h += "ALCOHOL / SOLVENT VAPOUR, ";
+  if (mq3WarnF)   h += "Alcohol vapour rising, ";
   if (tempAlarmF) h += "FIRE / OVERHEAT, ";
   if (tempWarnF)  h += "High temperature, ";
-  if (overflowF)  h += "TANK OVERFLOW, ";
-  if (breachF)    h += "DANGER ZONE BREACH, ";
+  if (soilAlarmF) h += "WATER LEAK / FLOODING, ";
+  if (soilWarnF)  h += "Moisture rising, ";
   if (h.length()) h.remove(h.length() - 2);
-  else h = warm ? "Gas sensor warming up" : "All clear";
+  else h = warm ? "Gas sensors warming up" : "All clear";
   hazards = h;
 
-  level = (gasAlarmF || tempAlarmF || overflowF || breachF) ? 2 : (gasWarnF || tempWarnF) ? 1 : 0;
+  String f = "";
+  if (!mq5Ok)  f += "MQ-5, ";
+  if (!mq3Ok)  f += "MQ-3, ";
+  if (!dhtOk)  f += "DHT11, ";
+  if (!soilOk) f += "Soil, ";
+  if (f.length()) f.remove(f.length() - 2);
+  faults = f;
 
-  unsigned long now = millis();
-  if (level == 2) relayHoldUntil = now + RELAY_HOLD_S * 1000UL;
-  bool want = relayMode == RELAY_FORCE_ON || (relayMode == RELAY_AUTO && now < relayHoldUntil);
-  if (want != relayOn) {
-    relayOn = want;
-    digitalWrite(PIN_RELAY, relayOn ? RELAY_ON : RELAY_OFF);
-    Serial.printf("[RELAY] %s\n", relayOn ? "ON" : "OFF");
-  }
+  level = (mq5AlarmF || mq3AlarmF || tempAlarmF || soilAlarmF) ? 2
+        : (mq5WarnF || mq3WarnF || tempWarnF || soilWarnF) ? 1 : 0;
 }
 
 void signal() {
   unsigned long now = millis();
-  bool muted = now < muteUntil;
-  bool g = false, y = false, r = false, buzz = false;
+  bool g = false, y = false, r = false;
   if (level == 2) {
     r = (now % 240) < 120;
-    buzz = r;
   } else if (level == 1) {
     y = (now % 800) < 400;
-    buzz = (now % 1600) < 120;
   } else {
     g = true;
     y = warmingUp() && (now % 2000) < 100;
   }
+  if (ledTest && now >= ledTestUntil) ledTest = 0;
+  if (ledTest) {                 // dashboard LED test overrides the status lights
+    uint8_t m = ledTest;
+    if (m == LT_CYCLE) m = 1 << ((now / 700) % 3);
+    g = m & LT_G; y = m & LT_Y; r = m & LT_R;
+  }
+  ledG = g; ledY = y; ledR = r;
   digitalWrite(PIN_LED_GREEN, g ? LED_GREEN_ON : !LED_GREEN_ON);
   digitalWrite(PIN_LED_YELLOW, y ? LED_YELLOW_ON : !LED_YELLOW_ON);
   digitalWrite(PIN_LED_RED, r ? LED_RED_ON : !LED_RED_ON);
-  digitalWrite(PIN_BUZZER, (buzz && !muted) ? HIGH : LOW);
 }
 
-void updateDisplay() {
-  unsigned long now = millis();
-  if (now - lastDisplay < (level == 2 ? 400UL : (unsigned long)DISPLAY_STEP_MS)) return;
-  lastDisplay = now;
-  displayStep++;
-  if (level == 2) {
-    if (displayStep % 2) { display.clear(); return; }
-    display.setSegments(gasAlarmF ? W_GAS : tempAlarmF ? W_FIRE : overflowF ? W_FULL : W_ZONE);
-    return;
-  }
-  switch (displayStep % 4) {
-    case 0: display.setSegments(warmingUp() ? W_WARM : W_SAFE); break;
-    case 1: display.showNumberDec(constrain(gasRaw, 0, 9999)); break;
-    case 2:
-      if (dhtOk) { display.showNumberDec(constrain((int)temp, -9, 99), false, 2, 0); display.setSegments(W_DEG_C, 2, 2); }
-      else display.showNumberHexEx(0xE1);   // "E1" = DHT fault
-      break;
-    case 3:
-      if (distOk) display.showNumberDec(constrain(dist, 0, 999));
-      else display.showNumberHexEx(0xE2);   // "E2" = ultrasonic fault
-      break;
+// Lights green, yellow, red one at a time so each LED can be checked by eye
+void ledSelfTest() {
+  const uint8_t pins[3] = {PIN_LED_GREEN, PIN_LED_YELLOW, PIN_LED_RED};
+  const uint8_t on[3]   = {LED_GREEN_ON, LED_YELLOW_ON, LED_RED_ON};
+  for (int i = 0; i < 3; i++) digitalWrite(pins[i], !on[i]);
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(pins[i], on[i]);
+    delay(400);
+    digitalWrite(pins[i], !on[i]);
   }
 }
 
 // ------------------------------------------------------------------ web
 void sendJson() {
-  char t[12], h[12], d[12];
+  char t[12], h[12], s[12], m5[12], m3[12];
   if (dhtOk) { snprintf(t, sizeof t, "%.1f", temp); snprintf(h, sizeof h, "%.0f", hum); }
   else { strcpy(t, "null"); strcpy(h, "null"); }
-  if (distOk) snprintf(d, sizeof d, "%d", dist); else strcpy(d, "null");
+  if (soilOk) snprintf(s, sizeof s, "%d", soilPct); else strcpy(s, "null");
+  if (mq5Ok) snprintf(m5, sizeof m5, "%d", mq5.value); else strcpy(m5, "null");
+  if (mq3Ok) snprintf(m3, sizeof m3, "%d", mq3.value); else strcpy(m3, "null");
   long warm = warmingUp() ? (long)GAS_WARMUP_S - (long)(millis() / 1000) : 0;
-  long mute = millis() < muteUntil ? (long)((muteUntil - millis()) / 1000) : 0;
-  const char *rm = relayMode == RELAY_AUTO ? "auto" : relayMode == RELAY_FORCE_ON ? "on" : "off";
 
-  char json[1100];
+  char json[1300];
   snprintf(json, sizeof json,
-    "{\"uptime\":%lu,\"clients\":%d,\"warmup\":%ld,\"level\":%d,\"hazards\":\"%s\","
+    "{\"uptime\":%lu,\"clients\":%d,\"warmup\":%ld,\"level\":%d,\"hazards\":\"%s\",\"faults\":\"%s\","
     "\"profile\":%d,\"profileName\":\"%s\","
-    "\"gas\":%d,\"temp\":%s,\"hum\":%s,\"dist\":%s,"
-    "\"flags\":{\"gasWarn\":%d,\"gasAlarm\":%d,\"tempWarn\":%d,\"tempAlarm\":%d,\"breach\":%d,\"overflow\":%d},"
-    "\"relay\":%d,\"relayMode\":\"%s\",\"mute\":%ld,"
-    "\"leds\":{\"g\":%d,\"y\":%d,\"r\":%d},"
-    "\"th\":{\"gasWarn\":%d,\"gasAlarm\":%d,\"tempWarn\":%.1f,\"tempAlarm\":%.1f,\"distBreach\":%d,\"tankOverflow\":%d}}",
-    millis() / 1000, WiFi.softAPgetStationNum(), warm, level, hazards.c_str(),
+    "\"mq5\":%s,\"mq3\":%s,\"temp\":%s,\"hum\":%s,\"soil\":%s,\"soilRaw\":%d,"
+    "\"flags\":{\"mq5Warn\":%d,\"mq5Alarm\":%d,\"mq3Warn\":%d,\"mq3Alarm\":%d,"
+    "\"tempWarn\":%d,\"tempAlarm\":%d,\"soilWarn\":%d,\"soilAlarm\":%d},"
+    "\"leds\":{\"g\":%d,\"y\":%d,\"r\":%d},\"ledTest\":%d,"
+    "\"th\":{\"mq5Warn\":%d,\"mq5Alarm\":%d,\"mq3Warn\":%d,\"mq3Alarm\":%d,"
+    "\"tempWarn\":%.1f,\"tempAlarm\":%.1f,\"soilWarn\":%d,\"soilAlarm\":%d}}",
+    millis() / 1000, WiFi.softAPgetStationNum(), warm, level, hazards.c_str(), faults.c_str(),
     profile, PROFILE_NAMES[profile],
-    gasRaw, t, h, d,
-    gasWarnF, gasAlarmF, tempWarnF, tempAlarmF, breachF, overflowF,
-    relayOn, rm, mute,
-    level == 0, level == 1, level == 2,
-    th.gasWarn, th.gasAlarm, th.tempWarn, th.tempAlarm, th.distBreach, th.tankOverflow);
+    m5, m3, t, h, s, soil.value,
+    mq5WarnF, mq5AlarmF, mq3WarnF, mq3AlarmF, tempWarnF, tempAlarmF, soilWarnF, soilAlarmF,
+    ledG, ledY, ledR, ledTest,
+    th.mq5Warn, th.mq5Alarm, th.mq3Warn, th.mq3Alarm, th.tempWarn, th.tempAlarm, th.soilWarn, th.soilAlarm);
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", json);
 }
@@ -255,31 +274,34 @@ void handleProfile() {
     int p = server.arg("p").toInt();
     if (p >= 0 && p <= 2) { profile = p; th = PROFILES[p]; saveSettings(); }
   }
-  sendJson();
-}
-
-void handleThresholds() {
-  if (server.hasArg("gasWarn"))    th.gasWarn      = constrain(server.arg("gasWarn").toInt(), 0, 4095);
-  if (server.hasArg("gasAlarm"))   th.gasAlarm     = constrain(server.arg("gasAlarm").toInt(), 0, 4095);
-  if (server.hasArg("tempWarn"))   th.tempWarn     = server.arg("tempWarn").toFloat();
-  if (server.hasArg("tempAlarm"))  th.tempAlarm    = server.arg("tempAlarm").toFloat();
-  if (server.hasArg("distBreach")) th.distBreach   = constrain(server.arg("distBreach").toInt(), 0, 400);
-  if (server.hasArg("tank"))       th.tankOverflow = constrain(server.arg("tank").toInt(), 0, 400);
-  if (th.gasWarn > th.gasAlarm) th.gasWarn = th.gasAlarm;
-  if (th.tempWarn > th.tempAlarm) th.tempWarn = th.tempAlarm;
-  saveSettings();
-  sendJson();
-}
-
-void handleRelay() {
-  String s = server.arg("mode");
-  relayMode = s == "on" ? RELAY_FORCE_ON : s == "off" ? RELAY_FORCE_OFF : RELAY_AUTO;
   evaluate();
   sendJson();
 }
 
-void handleMute() {
-  muteUntil = server.arg("on") == "0" ? 0 : millis() + MUTE_S * 1000UL;
+void handleThresholds() {
+  if (server.hasArg("mq5Warn"))   th.mq5Warn   = constrain(server.arg("mq5Warn").toInt(), 0, 4095);
+  if (server.hasArg("mq5Alarm"))  th.mq5Alarm  = constrain(server.arg("mq5Alarm").toInt(), 0, 4095);
+  if (server.hasArg("mq3Warn"))   th.mq3Warn   = constrain(server.arg("mq3Warn").toInt(), 0, 4095);
+  if (server.hasArg("mq3Alarm"))  th.mq3Alarm  = constrain(server.arg("mq3Alarm").toInt(), 0, 4095);
+  if (server.hasArg("tempWarn"))  th.tempWarn  = server.arg("tempWarn").toFloat();
+  if (server.hasArg("tempAlarm")) th.tempAlarm = server.arg("tempAlarm").toFloat();
+  if (server.hasArg("soilWarn"))  th.soilWarn  = constrain(server.arg("soilWarn").toInt(), 0, 100);
+  if (server.hasArg("soilAlarm")) th.soilAlarm = constrain(server.arg("soilAlarm").toInt(), 0, 100);
+  if (th.mq5Warn > th.mq5Alarm) th.mq5Warn = th.mq5Alarm;
+  if (th.mq3Warn > th.mq3Alarm) th.mq3Warn = th.mq3Alarm;
+  if (th.tempWarn > th.tempAlarm) th.tempWarn = th.tempAlarm;
+  if (th.soilWarn > th.soilAlarm) th.soilWarn = th.soilAlarm;
+  saveSettings();
+  evaluate();
+  sendJson();
+}
+
+// /api/ledtest?leds=<mask 0-8>  0 = back to normal, 8 = cycle G-Y-R
+void handleLedTest() {
+  ledTest = constrain(server.arg("leds").toInt(), 0, (int)LT_CYCLE);
+  ledTestUntil = millis() + LED_TEST_S * 1000UL;
+  Serial.printf("[LED TEST] mask %d\n", ledTest);
+  signal();
   sendJson();
 }
 
@@ -287,24 +309,23 @@ void handleMute() {
 void setup() {
   Serial.begin(115200);
   delay(300);
-  pinMode(PIN_US_TRIG, OUTPUT);
-  pinMode(PIN_US_ECHO, INPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
-  pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_YELLOW, OUTPUT);
   pinMode(PIN_LED_RED, OUTPUT);
-  digitalWrite(PIN_RELAY, RELAY_OFF);
-  digitalWrite(PIN_BUZZER, LOW);
+  ledSelfTest();
 
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);
-  int g = analogRead(PIN_GAS);
-  for (int i = 0; i < GAS_AVG_SAMPLES; i++) gasHist[i] = g;
-  gasRaw = g;
+  mq5.begin();
+  mq3.begin();
+  soil.begin();
+  for (int i = 0; i < 4; i++) {  // settle the unplugged-pin check before the first alarm decision
+    mq5.connected();
+    mq3.connected();
+    soil.connected();
+  }
+  readAnalogs();
 
-  display.setBrightness(0x0c);
-  display.setSegments(W_SAFE);
   dht.begin();
   loadSettings();
 
@@ -320,8 +341,7 @@ void setup() {
   server.on("/api/data", sendJson);
   server.on("/api/profile", handleProfile);
   server.on("/api/thresholds", handleThresholds);
-  server.on("/api/relay", handleRelay);
-  server.on("/api/mute", handleMute);
+  server.on("/api/ledtest", handleLedTest);
   server.onNotFound([] { server.sendHeader("Location", "http://192.168.4.1/", true); server.send(302, "text/plain", ""); });
   server.begin();
 
@@ -338,8 +358,7 @@ void loop() {
 
   if (now - lastSensor >= SENSOR_INTERVAL_MS) {
     lastSensor = now;
-    readGas();
-    readUltrasonic();
+    readAnalogs();
     evaluate();
   }
   if (now - lastDht >= DHT_INTERVAL_MS) {
@@ -348,13 +367,14 @@ void loop() {
     evaluate();
   }
   signal();
-  updateDisplay();
 
   if (now - lastLog >= 2000) {
     lastLog = now;
-    Serial.printf("[DATA] up %lus | gas %d | ", now / 1000, gasRaw);
+    Serial.printf("[DATA] up %lus | MQ-5 %d | MQ-3 %d | ", now / 1000, mq5.value, mq3.value);
     if (dhtOk) Serial.printf("temp %.1fC hum %.0f%% | ", temp, hum); else Serial.print("DHT FAULT | ");
-    if (distOk) Serial.printf("dist %dcm | ", dist); else Serial.print("ULTRASONIC FAULT | ");
-    Serial.printf("level %d | relay %s | %s\n", level, relayOn ? "ON" : "off", hazards.c_str());
+    Serial.printf("soil %d%% (raw %d) | level %d | %s", soilPct, soil.value, level, hazards.c_str());
+    if (faults.length()) Serial.printf(" | NOT CONNECTED: %s", faults.c_str());
+    Serial.printf(" | swing MQ-5 %d MQ-3 %d soil %d", mq5.swing, mq3.swing, soil.swing);
+    Serial.println();
   }
 }

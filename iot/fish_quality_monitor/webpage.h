@@ -49,6 +49,7 @@ aside h3{font-size:15px;margin:0 0 4px}
 .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:var(--sea);transition:width .5s}
 .bar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.35}
 .hold{width:100%;height:96px;margin-top:6px}
+[hidden]{display:none!important}
 .chip{display:inline-block;font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);margin:6px 6px 0 0}
 .chip.on{background:var(--bad);color:#fff;border-color:var(--bad)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -107,10 +108,10 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 </svg>
 <div class="s" id="wS">Meltwater must drain away. Only ice should touch the fish.</div></div>
 <div class="card tile"><h2>Rot &amp; chemical gas <span class="tag" id="gTag">OK</span></h2>
-<div><span class="v" id="gV">--</span><span class="u">MQ-3</span></div>
+<div><span class="v" id="gV">--</span><span class="u">MQ-135</span></div>
 <div class="bar"><i id="gBar"></i><u id="gMk1"></u><u id="gMk2"></u></div>
-<span class="chip" id="mq5">MQ-5 spoilage gas: clear</span><span class="chip" id="wet">Water at fish: no</span>
-<div class="s" id="gS">Alcohol / amine vapour from rotting fish or chemicals</div></div>
+<span class="chip" id="mq5">MQ-4 methane: clear</span><span class="chip" id="wet" hidden>Water at fish: no</span>
+<div class="s" id="gS">Ammonia / amine (TMA) vapour from rotting fish</div></div>
 <div class="card tile"><h2>Hold humidity</h2>
 <div><span class="v" id="hV">--</span><span class="u">%</span></div>
 <div class="bar"><i id="hBar" style="background:var(--water)"></i></div>
@@ -119,7 +120,7 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 <section class="two">
 <div class="card"><h2>Box display (TM1637) &amp; red LED <span class="led" id="led"></span></h2>
 <div class="seg"><svg id="segs" viewBox="0 0 300 110"></svg></div>
-<div class="note">The box display shows a rotating summary (temperature, water, gas, freshness) and flashes the fault code when anything goes abnormal: ICE, drAn, ALCO, rOt.</div></div>
+<div class="note">The box display shows a rotating summary (temperature, water, gas, freshness) and flashes the fault code when anything goes abnormal: ICE, drAn, nH3 (ammonia), CH4 (methane).</div></div>
 <div class="card"><h2>Trend · last 30 minutes</h2><canvas id="chart"></canvas>
 <div class="legend"><span style="--c:#e8483b">Temp °C</span><span style="--c:#3d9bd6">Water cm</span><span style="--c:#9b59b6">Gas ÷10</span><span style="--c:#16865a">Freshness ÷10</span></div></div>
 </section>
@@ -129,8 +130,8 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 <label>Ice danger above (°C)<input id="cTd" type="number" step="0.5"></label>
 <label>Water warning above (cm)<input id="cWw" type="number" step="0.5"></label>
 <label>Water danger above (cm)<input id="cWd" type="number" step="0.5"></label>
-<label>Gas warning (MQ-3 ADC)<input id="cGw" type="number" step="10"></label>
-<label>Gas danger (MQ-3 ADC)<input id="cGd" type="number" step="10"></label>
+<label>Gas warning (MQ-135 ADC)<input id="cGw" type="number" step="10"></label>
+<label>Gas danger (MQ-135 ADC)<input id="cGd" type="number" step="10"></label>
 <label>Sensor to empty floor (cm)<input id="cDepth" type="number" step="1"></label>
 <label>Box display upside down<select id="cFlip" style="font:inherit;padding:7px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)"><option value="1">Yes (flip 180°)</option><option value="0">No</option></select></label>
 </div>
@@ -147,9 +148,9 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 <div id="manual">
 <label class="sl">Ice temperature<input type="range" id="sT" min="-2" max="12" step="0.5"><output id="oT"></output></label>
 <label class="sl">Meltwater height<input type="range" id="sW" min="0" max="12" step="0.5"><output id="oW"></output></label>
-<label class="sl">MQ-3 gas<input type="range" id="sG" min="0" max="1023" step="1"><output id="oG"></output></label>
+<label class="sl">MQ-135 gas<input type="range" id="sG" min="0" max="1023" step="1"><output id="oG"></output></label>
 <label class="sl">Humidity<input type="range" id="sH" min="30" max="100" step="1"><output id="oH"></output></label>
-<div class="tg"><button id="bRot">MQ-5 spoilage gas</button><button id="bWet">Water at fish (probe wet)</button></div>
+<div class="tg"><button id="bRot">MQ-4 methane</button><button id="bWet" hidden>Water at fish (probe wet)</button></div>
 <div class="tg" style="margin-top:10px"><button class="btn" data-p="fresh">Fresh catch</button><button class="btn" data-p="melt">Ice melting</button><button class="btn" data-p="clog">Drain blocked</button><button class="btn" data-p="rot">Rotten fish</button><button class="btn" data-p="chem">Chemical used</button></div>
 </div>
 <div class="note" id="simNote"></div>
@@ -163,8 +164,8 @@ let D=null,lastOk=0,standalone=!!window.SIM||location.protocol==="file:"||/[?&]d
 function enterSim(){standalone=true;document.body.classList.add("sim")}
 if(standalone)enterSim();
 /* ---------- offline twin of the firmware (used when the page is opened without the board) ---------- */
-const twin={t0:Date.now(),cfg:{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1},sim:1,story:0,
-man:{t:0.5,h:92,w:0.8,g:190,r:false,wet:false},hist:[],lastH:0,
+const twin={t0:Date.now(),cfg:{depth:40,tw:1,td:4,ww:2,wd:5,gw:550,gd:750,flip:1},sim:1,story:0,
+man:{t:0.5,h:92,w:0.8,g:420,r:false,wet:false},hist:[],lastH:0,
 up(){return (Date.now()-this.t0)/1000},
 ramp(t,a,b,x,y){if(t<=a)return x;if(t>=b)return y;const k=(t-a)/(b-a);return x+(y-x)*k*k*(3-2*k)},
 n(a){return (Math.random()*2-1)*a},
@@ -173,13 +174,13 @@ read(){const c=this.cfg;let r;
 if(!this.story){const m=this.man;r={temp:m.t,hum:m.h,water:m.w,mq3:m.g,mq5:m.r,wet:m.wet}}
 else{const t=this.up()%240,R=this.ramp.bind(this);let T=R(t,40,80,.4,3);if(t>=80)T=R(t,80,130,3,2);if(t>=150)T=R(t,150,195,2,5.5);if(t>=200)T=R(t,200,225,5.5,.4);
 let W=R(t,40,80,.8,1.8);if(t>=80)W=R(t,80,125,1.8,7);if(t>=130)W=R(t,130,145,7,1);if(t>=200)W=R(t,200,215,1,.8);
-let G=190;if(t>=150)G=R(t,150,195,190,640);if(t>=200)G=R(t,200,220,640,190);
-W=Math.max(0,W+this.n(.15));r={temp:T+this.n(.15),hum:91+this.n(2),water:W,mq3:Math.round(G+this.n(8)),mq5:t>=178&&t<205,wet:W>3}}
+let G=420;if(t>=150)G=R(t,150,195,420,860);if(t>=200)G=R(t,200,220,860,420);
+W=Math.max(0,W+this.n(.15));r={temp:T+this.n(.15),hum:91+this.n(2),water:W,mq3:Math.round(G+this.n(8)),mq5:t>=178&&t<205,wet:false}}
 const lv=(v,w,d)=>v>d?"danger":v>w?"warn":"ok",o={ok:0,warn:1,danger:2};
 let tL=lv(r.temp,c.tw,c.td),wL=lv(r.water,c.ww,c.wd);if(r.wet&&wL==="ok")wL="warn";
 let gL=lv(r.mq3,c.gw,c.gd);let a=0;if(tL!=="ok")a|=1;if(wL!=="ok")a|=2;if(gL!=="ok")a|=4;if(r.mq5){a|=8;gL="danger"}
 const L=["ok","warn","danger"][Math.max(o[tL],o[wL],o[gL])];
-let s=100;if(r.temp>0)s-=r.temp*6;if(r.water>c.ww)s-=(r.water-c.ww)*10;if(r.wet)s-=8;if(r.mq3>220)s-=(r.mq3-220)/7;if(r.mq5)s-=25;
+let s=100;if(r.temp>0)s-=r.temp*6;if(r.water>c.ww)s-=(r.water-c.ww)*10;if(r.wet)s-=8;if(r.mq3>420)s-=(r.mq3-420)/7;if(r.mq5)s-=25;
 s=Math.max(0,Math.min(100,Math.round(s)));
 const now=Date.now();if(now-this.lastH>=10000||!this.hist.length){this.lastH=now;this.hist.push([Math.round(r.temp*10),Math.round(r.water*10),r.mq3,s,(r.wet?1:0)|(r.mq5?2:0)|(o[L]<<2)|16]);if(this.hist.length>180)this.hist.shift()}
 return Object.assign(r,{dist:c.depth-r.water,score:s,grade:s>=80?"FRESH":s>=60?"GOOD":s>=40?"CHECK":"SPOILED",level:L,tempLv:tL,waterLv:wL,gasLv:gL,alerts:a,warmup:0,
@@ -187,7 +188,7 @@ sim:this.sim,story:this.story,phase:this.story?this.phase(this.up()%240):"",upti
 api(path){const u=new URL(path,"http://x/"),q=u.searchParams,c=this.cfg;
 if(u.pathname==="/api/history")return{period:10,p:this.hist};
 if(u.pathname==="/api/settings"){if(q.has("mode")){this.sim=q.get("mode")==="sim"?1:0}if(q.has("story"))this.story=q.get("story")==="1"?1:0;
-if(q.has("reset"))Object.assign(c,{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1});
+if(q.has("reset"))Object.assign(c,{depth:40,tw:1,td:4,ww:2,wd:5,gw:550,gd:750,flip:1});
 for(const k of["depth","tw","td","ww","wd","gw","gd","flip"])if(q.has(k))c[k]=+q.get(k)}
 if(u.pathname==="/api/sim"){const m=this.man;for(const[k,f]of[["t","t"],["h","h"],["w","w"],["g","g"]])if(q.has(k))m[f]=+q.get(k);
 if(q.has("r"))m.r=q.get("r")==="1";if(q.has("wet"))m.wet=q.get("wet")==="1";this.sim=1;this.story=0}
@@ -207,13 +208,13 @@ const pad=(v,n)=>String(v).padStart(n," ");
 function segFrame(){
 if(!D){segShow("----");return}
 const ms=Date.now(),f=D,tmp=f.temp==null?"E-dH":pad(Math.max(-9,Math.min(99,Math.round(f.temp))),2)+"*C",
-wat=f.water==null?"E-US":"H"+pad(Math.min(999,Math.round(f.water)),3),gas=f.mq3==null?"E-AL":"AL"+pad(Math.min(99,Math.floor(f.mq3*100/1024)),2),
+wat=f.water==null?"E-US":"H"+pad(Math.min(999,Math.round(f.water)),3),gas=f.mq3==null?"E-nH":"nH"+pad(Math.min(99,Math.floor(f.mq3*100/1024)),2),
 sc=f.score>=100?"F100":"Fr"+pad(f.score,2);
 if(f.warmup>0&&!(f.alerts&~AL.SENSOR)){segShow(Math.floor(ms/1500)%2?"PrE ":pad(f.warmup,4));return}
 if(!f.alerts){segShow([tmp,wat,gas,sc][Math.floor(ms/2500)%4]);return}
 const list=[0,1,2,3,4].filter(i=>f.alerts&(1<<i)),slot=Math.floor(ms/1200),w=list[Math.floor(slot/2)%list.length],val=slot%2;
 if(ms%500>=330){segShow("    ");return}
-segShow([val?tmp:"ICE ",val?wat:"drAn",val?gas:"ALCO",val?"GAS ":"rOt ",f.temp==null?tmp:f.water==null?wat:gas][w]);}
+segShow([val?tmp:"ICE ",val?wat:"drAn",val?gas:"nH3 ",val?"GAS ":"CH4 ",f.temp==null?tmp:f.water==null?wat:gas][w]);}
 setInterval(segFrame,100);
 setInterval(()=>{if(!D)return;const ms=Date.now(),l=D.level;$("led").classList.toggle("on",l==="danger"?ms%200<100:l==="warn"?ms%1000<500:D.warmup>0?ms%2000<60:false)},50);
 /* ---------- rendering ---------- */
@@ -227,11 +228,11 @@ $("score").textContent=f.score;$("ring").style.strokeDashoffset=314.16*(1-f.scor
 $("ring").style.stroke=f.score>=60?"var(--ok)":f.score>=40?"var(--warn)":"var(--bad)";
 $("grade").textContent=f.grade;$("grade").style.color=col[f.level];
 const A=[];
-if(f.alerts&AL.ROT)A.push(["danger","Spoilage gas","MQ-5 tripped. Fish may be rotting. Inspect the catch and remove spoiled fish."]);
-if(f.alerts&AL.ALCO)A.push([f.gasLv==="danger"?"danger":"warn","Alcohol / chemical vapour",f.gasLv==="danger"?"Strong vapour: rotten fish or a chemical preservative used on the catch.":"Vapour rising. Early spoilage. Check the catch soon."]);
+if(f.alerts&AL.ROT)A.push(["danger","Methane","MQ-4 tripped: decomposition gas in the hold. Fish may be rotting. Inspect the catch and remove spoiled fish."]);
+if(f.alerts&AL.ALCO)A.push([f.gasLv==="danger"?"danger":"warn","Ammonia / amines",f.gasLv==="danger"?"Strong ammonia smell: the fish are rotting. Inspect the catch now.":"Ammonia rising. Early spoilage. Check the catch soon."]);
 if(f.alerts&AL.DRAIN)A.push([f.waterLv,"Meltwater",f.waterLv==="danger"?"Water "+fmt(f.water,1)+" cm. The drain outlet is blocked. Open it now, the fish are soaking.":(f.wet?"Water has reached the fish. Check the drain outlet.":"Water building up ("+fmt(f.water,1)+" cm). The drain is slowing.")]);
 if(f.alerts&AL.ICE)A.push([f.tempLv,"Ice",f.tempLv==="danger"?"Hold at "+fmt(f.temp,1)+" °C. No ice left. Add crushed ice immediately.":"Above 0 °C. The ice is melting. Top up the ice."]);
-if(f.alerts&AL.SENSOR)A.push(["warn","Sensor check",["temp","water","mq3"].filter(k=>f[k]==null).map(k=>({temp:"DHT11",water:"ultrasonic",mq3:"MQ-3"})[k]).join(", ")+" not answering. Check the wiring (see CONNECTIONS.md)."]);
+if(f.alerts&AL.SENSOR)A.push(["warn","Sensor check",["temp","water","mq3"].filter(k=>f[k]==null).map(k=>({temp:"DHT11",water:"ultrasonic",mq3:"MQ-135"})[k]).join(", ")+" not answering. Check the wiring (see CONNECTIONS.md)."]);
 $("alerts").innerHTML=A.length?A.map(a=>`<li class="a-${a[0]}"><b>${a[1]}</b><span>${a[2]}</span></li>`).join(""):`<li class="a-ok"><b>All good</b><span>Ice is holding, the drain is clear and no spoilage gas.</span></li>`;
 $("advice").textContent=f.warmup>0?"Gas sensors warming up: "+f.warmup+" s":f.level==="ok"?"Catch is in good condition":f.level==="warn"?"Something needs attention":"Act now to save the catch";
 $("phase").textContent=f.sim?(f.story?"Simulator · voyage story: "+f.phase:"Simulator · manual values"):"";
@@ -249,7 +250,7 @@ $("wS").textContent=f.water==null?"Ultrasonic sensor not answering":"Surface "+f
 tag($("gTag"),f.gasLv,f.mq3==null);$("gV").textContent=f.mq3==null?"--":f.mq3;
 $("gBar").style.width=f.mq3==null?0:pct(f.mq3,0,1023)+"%";$("gBar").style.background=col[f.gasLv];
 $("gMk1").style.left=pct(c.gw,0,1023)+"%";$("gMk2").style.left=pct(c.gd,0,1023)+"%";
-$("mq5").className="chip"+(f.mq5?" on":"");$("mq5").textContent="MQ-5 spoilage gas: "+(f.mq5?"DETECTED":"clear");
+$("mq5").className="chip"+(f.mq5?" on":"");$("mq5").textContent="MQ-4 methane: "+(f.mq5?"DETECTED":"clear");
 $("wet").className="chip"+(f.wet?" on":"");$("wet").textContent="Water at fish: "+(f.wet?"YES":"no");
 $("hV").textContent=fmt(f.hum,0);$("hBar").style.width=f.hum==null?0:f.hum+"%";
 // mode
@@ -280,11 +281,11 @@ for(const[i,c,k]of ser){x.strokeStyle=c;x.lineWidth=2;x.beginPath();let pen=fals
 p.forEach((r,j)=>{if(r[i]==null){pen=false;return}const X=L+j/(n-1)*pw,Y=T+ph-Math.max(0,Math.min(max,r[i]*k))/max*ph;pen?x.lineTo(X,Y):x.moveTo(X,Y);pen=true});x.stroke()}}
 /* ---------- controls ---------- */
 async function send(path){try{D=await api(path);render()}catch(e){}}
-const PRESET={fresh:[0.5,0.8,190,92,0,0],melt:[3,1.8,200,90,0,0],clog:[2,7,210,95,0,1],rot:[6,1.5,640,88,1,0],chem:[0.5,0.8,600,92,0,0]};
+const PRESET={fresh:[0.5,0.8,420,92,0,0],melt:[3,1.8,430,90,0,0],clog:[2,7,440,95,0,0],rot:[6,1.5,860,88,1,0],chem:[0.5,0.8,800,92,0,0]};
 document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{const p=PRESET[b.dataset.p];editing=0;send(`/api/sim?t=${p[0]}&w=${p[1]}&g=${p[2]}&h=${p[3]}&r=${p[4]}&wet=${p[5]}`)});
 document.querySelectorAll("#modeTabs button").forEach(b=>b.onclick=()=>{const m=b.dataset.m;
 if(m==="story")send("/api/settings?mode=sim&story=1");
-else send("/api/sim?t="+(D&&D.temp!=null?D.temp:0.5)+"&w="+(D&&D.water!=null?D.water:1)+"&g="+(D&&D.mq3!=null?D.mq3:190)+"&h="+(D&&D.hum!=null?D.hum:90))});
+else send("/api/sim?t="+(D&&D.temp!=null?D.temp:0.5)+"&w="+(D&&D.water!=null?D.water:1)+"&g="+(D&&D.mq3!=null?D.mq3:420)+"&h="+(D&&D.hum!=null?D.hum:90))});
 let simTimer;
 function pushSim(){editing=Date.now();showOut();clearTimeout(simTimer);simTimer=setTimeout(()=>send("/api/sim?t="+$("sT").value+"&w="+$("sW").value+"&g="+$("sG").value+"&h="+$("sH").value),120)}
 ["sT","sW","sG","sH"].forEach(id=>$(id).addEventListener("input",pushSim));

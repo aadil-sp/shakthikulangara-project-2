@@ -1,0 +1,394 @@
+<title>Shakthikulangara Wiring Checklist</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: bench sheet. One section per project, one row per wire, a tick box per wire. */
+:root {
+  --bg: #f3f5f4;
+  --paper: #ffffff;
+  --fg: #17201d;
+  --muted: #5b6863;
+  --line: #d6ddda;
+  --pin-bg: #10302a;
+  --pin-fg: #e9f7f1;
+  --iot: #0f7d6c;
+  --elec: #b45a09;
+  --robo: #2f5bb8;
+  --warn-bg: #fff3d6;
+  --warn-fg: #7a4b00;
+  --pwr: #c0322b;
+  --gnd: #3a3f3d;
+  --done-bg: #e7f4ee;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1513; --paper: #171f1c; --fg: #e3ebe7; --muted: #93a39d; --line: #2a3632;
+    --pin-bg: #cfeee3; --pin-fg: #0d241f;
+    --iot: #3cc3ab; --elec: #f0a14a; --robo: #7ea3f2;
+    --warn-bg: #3a2c10; --warn-fg: #f6cf84; --pwr: #ff7b72; --gnd: #b9c3bf; --done-bg: #16302a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1513; --paper: #171f1c; --fg: #e3ebe7; --muted: #93a39d; --line: #2a3632;
+  --pin-bg: #cfeee3; --pin-fg: #0d241f;
+  --iot: #3cc3ab; --elec: #f0a14a; --robo: #7ea3f2;
+  --warn-bg: #3a2c10; --warn-fg: #f6cf84; --pwr: #ff7b72; --gnd: #b9c3bf; --done-bg: #16302a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.45;
+}
+.wrap {
+  max-width: 1040px; margin: 0 auto;
+  padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.top h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: 2.2rem;
+  letter-spacing: .01em; margin: 0; text-wrap: balance;
+}
+header.top p { margin: 6px 0 0; color: var(--muted); max-width: 68ch; }
+nav.jump {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  background: var(--bg); padding-block: 12px; margin-top: 16px;
+  border-bottom: 1px solid var(--line);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+nav.jump a {
+  display: inline-flex; align-items: center; gap: 8px;
+  text-decoration: none; color: var(--fg); font-weight: 600;
+  padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper);
+}
+nav.jump a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--robo); outline-offset: 2px; }
+nav.jump .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+nav.jump .count { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); }
+
+section.project { margin-top: 36px; scroll-margin-top: 72px; }
+.proj-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; border-top: 4px solid var(--c); padding-top: 12px; }
+.proj-head .tag { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--c); font-size: 1rem; }
+.proj-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.8rem; margin: 0; flex: 1 1 auto; text-wrap: balance; }
+.proj-head .board { font-family: var(--font-mono); font-size: .85rem; color: var(--muted); }
+.proj-meta { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; margin: 10px 0 14px; }
+.progress { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: .85rem; color: var(--muted); }
+.bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--c); transition: width .2s; }
+button.reset {
+  font: 600 .85rem var(--font-body); color: var(--fg); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+button.reset:hover { border-color: var(--c); }
+
+.device { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; overflow: hidden; }
+.device h3 { margin: 0; padding: 10px 14px; font-size: 1.05rem; font-weight: 700; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; border-bottom: 1px solid var(--line); }
+.device h3 .num { font-family: var(--font-mono); color: var(--c); font-size: .9rem; }
+.device h3 small { font-weight: 400; color: var(--muted); font-size: .9rem; }
+.rows { display: grid; }
+label.row {
+  display: grid; grid-template-columns: 28px minmax(90px, 1fr) 24px minmax(120px, 1.1fr) minmax(0, 2.4fr);
+  gap: 8px 12px; align-items: center; padding: 9px 14px; cursor: pointer;
+  border-top: 1px solid var(--line);
+}
+label.row:first-child { border-top: 0; }
+label.row:hover { background: color-mix(in srgb, var(--c) 6%, transparent); }
+label.row.done { background: var(--done-bg); }
+label.row.done .from, label.row.done .to { text-decoration: line-through; text-decoration-color: var(--muted); }
+label.row input { width: 20px; height: 20px; accent-color: var(--c); margin: 0; cursor: pointer; }
+.from { font-weight: 600; }
+.arrow { color: var(--muted); text-align: center; }
+.to { justify-self: start; }
+.pin {
+  display: inline-block; font-family: var(--font-mono); font-weight: 700; font-size: 1rem;
+  background: var(--pin-bg); color: var(--pin-fg); padding: 3px 9px; border-radius: 4px; white-space: nowrap;
+}
+.pin.pwr { background: var(--pwr); color: #fff; }
+.pin.gnd { background: var(--gnd); color: var(--bg); }
+.pin.none { background: transparent; color: var(--muted); border: 1px dashed var(--line); font-weight: 500; }
+.note { color: var(--muted); font-size: .92rem; min-width: 0; }
+.note .warn { display: inline-block; background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; padding: 1px 7px; border-radius: 4px; }
+.callout { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 12px 14px; margin-top: 12px; font-size: .95rem; }
+.callout b { font-weight: 700; }
+.callout ul { margin: 6px 0 0; padding-left: 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: .9rem; color: var(--muted); align-items: center; }
+.src { font-size: .82rem; color: var(--muted); margin-top: 10px; font-family: var(--font-mono); overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  label.row { grid-template-columns: 28px 1fr auto; grid-template-areas: "c f t" "c n n"; }
+  label.row input { grid-area: c; }
+  .from { grid-area: f; }
+  .arrow { display: none; }
+  .to { grid-area: t; justify-self: end; }
+  .note { grid-area: n; }
+  header.top h1 { font-size: 1.8rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Wiring checklist: IoT, Electronics, Robotics</h1>
+    <p>Every wire for the three Shakthikulangara projects, taken from the pin settings in each project's firmware. Tick a wire once it's connected and checked. Ticks stay saved in this browser.</p>
+    <div class="legend">
+      <span><span class="pin">D5</span> signal pin</span>
+      <span><span class="pin pwr">5V</span> power</span>
+      <span><span class="pin gnd">GND</span> ground</span>
+      <span><span class="pin none">leave empty</span> not connected</span>
+      <span><span class="warn" style="background:var(--warn-bg);color:var(--warn-fg);padding:1px 7px;border-radius:4px;font-weight:600">resistor</span> needs an extra part</span>
+    </div>
+  </header>
+  <nav class="jump" id="jump"></nav>
+  <main id="projects"></main>
+</div>
+
+<script>
+const PROJECTS = [
+  {
+    id: "iot", color: "--iot", tag: "IoT",
+    name: "Marine Fish Quality Monitor",
+    board: "NodeMCU ESP8266 (ESP-12E) · use the D-labels printed on the board",
+    src: "iot/fish_quality_monitor/config.h",
+    devices: [
+      { name: "TM1637 4-digit display", sub: "mounted upside down", rows: [
+        ["CLK", "D5", "", "GPIO14"],
+        ["DIO", "D6", "", "GPIO12"],
+        ["VCC", "VIN", "pwr", "5 V for full brightness"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "DHT11", sub: "ice temperature + humidity", rows: [
+        ["DATA / S", "D4", "", "GPIO2. 3-pin modules already have the pull-up"],
+        ["VCC / +", "3V3", "pwr", ""],
+        ["GND / −", "GND", "gnd", ""],
+      ]},
+      { name: "HC-SR04 ultrasonic", sub: "meltwater height", rows: [
+        ["TRIG", "D7", "", "GPIO13, direct"],
+        ["ECHO", "D8", "", "!1k/2k divider: ECHO → 1 kΩ → D8, then 2 kΩ from D8 to GND"],
+        ["VCC", "VIN", "pwr", "5 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "MQ-3 gas sensor", sub: "alcohol / chemical / rotting", rows: [
+        ["AO", "A0", "", "Direct. NodeMCU has its own divider on A0"],
+        ["DO", "—", "none", "Leave unconnected"],
+        ["VCC", "VIN", "pwr", "Heater needs 5 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "MQ-5 gas sensor", sub: "spoilage gas", rows: [
+        ["DO", "D1", "", "!4.7 kΩ in series: DO → 4.7 kΩ → D1 (not a divider)"],
+        ["AO", "—", "none", "Leave unconnected"],
+        ["VCC", "VIN", "pwr", "5 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Soil moisture probe", sub: "water touching the fish", rows: [
+        ["DO", "D2", "", "GPIO4, direct (probe runs on 3.3 V)"],
+        ["AO", "—", "none", "Leave unconnected"],
+        ["VCC", "3V3", "pwr", ""],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Red LED", sub: "alarm", rows: [
+        ["+ (long leg)", "D0", "", "!220 Ω resistor in series. GPIO16"],
+        ["− (short leg)", "GND", "gnd", ""],
+      ]},
+    ],
+    callout: `<b>Power:</b> use a 5 V / 1 A or bigger charger or power bank. The two MQ heaters draw about 150 mA each.
+      <ul><li>All grounds join at the NodeMCU GND.</li>
+      <li>Free pins: D3 and RX/TX. Don't use D3 (boot pin) for anything.</li>
+      <li>Pots: MQ-5 LED off in clean air. Soil probe LED on when dipped in water.</li></ul>`,
+  },
+  {
+    id: "electronics", color: "--elec", tag: "Electronics",
+    name: "HazardGuard C3",
+    board: "ESP32-C3 SuperMini · pins are GPIO numbers · 4 sensors, 3 LEDs",
+    src: "electronics/hazardguard_c3/config.h",
+    devices: [
+      { name: "MQ-5 gas sensor", sub: "LPG / natural gas, already connected", rows: [
+        ["AO", "GPIO 1", "", "Direct (no divider)"],
+        ["DO", "—", "none", "Leave unconnected"],
+        ["VCC", "5V", "pwr", "Heater needs 5 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "MQ-3 gas sensor", sub: "alcohol / solvent vapour", rows: [
+        ["AO", "GPIO 4", "", "Direct (no divider)"],
+        ["DO", "—", "none", "Leave unconnected"],
+        ["VCC", "5V", "pwr", "Heater needs 5 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Soil moisture probe", sub: "water leak / flooding", rows: [
+        ["AO", "GPIO 0", "", "Direct"],
+        ["DO", "—", "none", "Leave unconnected"],
+        ["VCC", "3V3", "pwr", "!3V3 only: on 5V the AO could go above 3.3 V"],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "DHT11", sub: "temperature + humidity", rows: [
+        ["DATA", "GPIO 6", "", "3-pin modules already have the pull-up"],
+        ["VCC", "3V3", "pwr", ""],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Green LED", sub: "safe, MOVED from GPIO 0", rows: [
+        ["+ (long leg)", "GPIO 7", "", "!220 Ω resistor in series"],
+        ["− (short leg)", "GND", "gnd", ""],
+      ]},
+      { name: "Yellow LED", sub: "warning", rows: [
+        ["+ (long leg)", "GPIO 8", "", "!220 Ω resistor in series"],
+        ["− (short leg)", "GND", "gnd", ""],
+      ]},
+      { name: "Red LED", sub: "danger", rows: [
+        ["+ (long leg)", "GPIO 3", "", "!220 Ω resistor in series"],
+        ["− (short leg)", "GND", "gnd", ""],
+      ]},
+    ],
+    callout: `<b>One LED moves:</b> green goes from GPIO 0 to GPIO 7, because GPIO 0 is needed for the soil probe (analog).
+      <ul><li>Leave GPIO 2, 5, 9 and 10 empty. GPIO 2 and 9 are boot pins (9 is the BOOT button).</li>
+      <li>No buzzer, relay, ultrasonic or display on this build.</li>
+      <li>All grounds join at the C3 GND. MQ heaters draw about 150 mA each, so use a good 5 V USB supply.</li></ul>`,
+  },
+  {
+    id: "robotics", color: "--robo", tag: "Robotics",
+    name: "MarkerPilot car",
+    board: "Car: ESP32-WROOM-32 DevKit · Gateway: ESP32-C3 on USB (no wires)",
+    src: "robotics/firmware/markerpilot_car/markerpilot_car.ino",
+    devices: [
+      { name: "L298N motor driver", sub: "signal side", rows: [
+        ["IN1 (left forward)", "GPIO 27", "", ""],
+        ["IN2 (left back)", "GPIO 26", "", ""],
+        ["IN3 (right forward)", "GPIO 25", "", ""],
+        ["IN4 (right back)", "GPIO 33", "", ""],
+        ["ENA / ENB", "—", "none", "Keep both jumpers ON"],
+        ["GND", "GND", "gnd", "Common ground with the ESP32"],
+      ]},
+      { name: "L298N motor driver", sub: "power side", rows: [
+        ["12V terminal", "Battery +", "pwr", "7.4 V or 12 V pack"],
+        ["GND terminal", "Battery −", "gnd", "Same terminal as the ESP32 GND wire"],
+        ["OUT1 / OUT2", "Left motor", "", "Swap these two if the left wheel runs backwards"],
+        ["OUT3 / OUT4", "Right motor", "", "Swap these two if the right wheel runs backwards"],
+      ]},
+      { name: "Ultrasonic LEFT", sub: "HC-SR04", rows: [
+        ["TRIG", "GPIO 5", "", ""],
+        ["ECHO", "GPIO 18", "", "!1k/2k divider"],
+        ["VCC", "5V / VIN", "pwr", ""],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Ultrasonic FRONT", sub: "HC-SR04", rows: [
+        ["TRIG", "GPIO 22", "", ""],
+        ["ECHO", "GPIO 23", "", "!1k/2k divider"],
+        ["VCC", "5V / VIN", "pwr", ""],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Ultrasonic RIGHT", sub: "HC-SR04", rows: [
+        ["TRIG", "GPIO 19", "", ""],
+        ["ECHO", "GPIO 21", "", "!1k/2k divider"],
+        ["VCC", "5V / VIN", "pwr", ""],
+        ["GND", "GND", "gnd", ""],
+      ]},
+      { name: "Buzzer", sub: "optional", rows: [
+        ["+", "GPIO 4", "", ""],
+        ["−", "GND", "gnd", ""],
+      ]},
+      { name: "Status LED", sub: "on the board, no wire", rows: [
+        ["On-board LED", "GPIO 2", "", "Fast flicker = receiving, slow blink = waiting"],
+      ]},
+      { name: "USB gateway", sub: "ESP32-C3 plugged into the laptop", rows: [
+        ["USB", "Laptop", "", "No other wires. Pairs with the car by itself"],
+      ]},
+    ],
+    callout: `<b>ECHO divider (all three sonars):</b> ECHO → 1 kΩ → ESP32 pin, then 2 kΩ from that pin to GND.
+      <ul><li>ESP32 power: usually the L298N 5V output to the ESP32 VIN, or a USB power bank. Check which one your car uses.</li>
+      <li>The battery minus, L298N GND and ESP32 GND must all be joined.</li></ul>`,
+  },
+];
+
+const KEY = "wiring-checklist-v1";
+let ticks = {};
+try { ticks = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { ticks = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) {} };
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const noteHtml = n => n.startsWith("!")
+  ? `<span class="warn">${esc(n.slice(1).split(":")[0])}</span>${n.includes(":") ? " " + esc(n.slice(n.indexOf(":") + 1)) : ""}`
+  : esc(n);
+
+const main = document.getElementById("projects");
+const nav = document.getElementById("jump");
+
+PROJECTS.forEach(p => {
+  let total = 0;
+  const devicesHtml = p.devices.map((d, di) => {
+    const rows = d.rows.map((r, ri) => {
+      const id = `${p.id}-${di}-${ri}`;
+      total++;
+      const [from, to, kind, note] = r;
+      return `<label class="row" for="${id}">
+        <input type="checkbox" id="${id}" data-p="${p.id}">
+        <span class="from">${esc(from)}</span>
+        <span class="arrow">→</span>
+        <span class="to"><span class="pin ${kind}">${kind === "none" ? "leave empty" : esc(to)}</span></span>
+        <span class="note">${note ? noteHtml(note) : ""}</span>
+      </label>`;
+    }).join("");
+    return `<div class="device"><h3><span class="num">${String(di + 1).padStart(2, "0")}</span>${esc(d.name)}${d.sub ? ` <small>${esc(d.sub)}</small>` : ""}</h3><div class="rows">${rows}</div></div>`;
+  }).join("");
+  p.total = total;
+
+  const sec = document.createElement("section");
+  sec.className = "project";
+  sec.id = p.id;
+  sec.style.setProperty("--c", `var(${p.color})`);
+  sec.innerHTML = `
+    <div class="proj-head"><span class="tag">${p.tag}</span><h2>${esc(p.name)}</h2></div>
+    <div class="board" style="font-family:var(--font-mono);font-size:.85rem;color:var(--muted);margin-top:4px">${esc(p.board)}</div>
+    <div class="proj-meta">
+      <div class="progress"><span id="cnt-${p.id}">0 / ${total}</span><div class="bar"><i id="bar-${p.id}"></i></div></div>
+      <button class="reset" type="button" id="reset-${p.id}">Clear ticks</button>
+    </div>
+    ${devicesHtml}
+    <div class="callout">${p.callout}</div>
+    <div class="src">Pins from ${esc(p.src)}</div>`;
+  main.appendChild(sec);
+
+  const a = document.createElement("a");
+  a.href = `#${p.id}`;
+  a.style.setProperty("--c", `var(${p.color})`);
+  a.innerHTML = `<span class="dot"></span>${p.tag}<span class="count" id="nav-${p.id}">0/${total}</span>`;
+  nav.appendChild(a);
+});
+
+function refresh(pid) {
+  const boxes = [...document.querySelectorAll(`input[data-p="${pid}"]`)];
+  const done = boxes.filter(b => b.checked).length;
+  const p = PROJECTS.find(x => x.id === pid);
+  document.getElementById(`cnt-${pid}`).textContent = `${done} / ${p.total} wires checked`;
+  document.getElementById(`nav-${pid}`).textContent = `${done}/${p.total}`;
+  document.getElementById(`bar-${pid}`).style.width = `${(done / p.total) * 100}%`;
+}
+
+document.querySelectorAll("label.row input").forEach(box => {
+  box.checked = !!ticks[box.id];
+  box.closest("label").classList.toggle("done", box.checked);
+  box.addEventListener("change", () => {
+    if (box.checked) ticks[box.id] = 1; else delete ticks[box.id];
+    box.closest("label").classList.toggle("done", box.checked);
+    save();
+    refresh(box.dataset.p);
+  });
+});
+
+PROJECTS.forEach(p => {
+  refresh(p.id);
+  document.getElementById(`reset-${p.id}`).addEventListener("click", () => {
+    document.querySelectorAll(`input[data-p="${p.id}"]`).forEach(b => {
+      b.checked = false; delete ticks[b.id]; b.closest("label").classList.remove("done");
+    });
+    save();
+    refresh(p.id);
+  });
+});
+
+const h = location.hash.slice(1);
+if (h && document.getElementById(h)) document.getElementById(h).scrollIntoView();
+</script>

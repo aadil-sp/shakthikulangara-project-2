@@ -12,21 +12,21 @@
 #include <Arduino.h>
 
 // ---------------------------------------------------------------- pins
+// The NodeMCU has a single analog input (A0), so only the MQ-135 is read as a
+// level. The MQ-4 uses its comparator DO output (gas yes / no).
 #define PIN_TM_CLK      D5   // GPIO14  TM1637 CLK
 #define PIN_TM_DIO      D6   // GPIO12  TM1637 DIO
 #define PIN_DHT         D4   // GPIO2   DHT11 DATA
 #define PIN_US_TRIG     D7   // GPIO13  HC-SR04 TRIG
-#define PIN_US_ECHO     D8   // GPIO15  HC-SR04 ECHO (through 1k/2k divider)
-#define PIN_MQ3_AO      A0   // ADC     MQ-3 AO (alcohol / chemical / rot)
-#define PIN_MQ5_DO      D1   // GPIO5   MQ-5 DO (spoilage gas trip, through 4.7k series resistor)
-#define PIN_SOIL_DO     D2   // GPIO4   Soil moisture DO (water touching the fish)
-#define PIN_LED_RED     D0   // GPIO16  Red LED (220R to GND)
+#define PIN_US_ECHO     D8   // GPIO15  HC-SR04 ECHO (1k/2k divider, or HC-SR04 on 3V3)
+#define PIN_MQ3_AO      A0   // ADC     MQ-135 AO (ammonia / amines from rotting fish)
+#define PIN_MQ5_DO      D1   // GPIO5   MQ-4 DO (methane trip)
+#define PIN_LED_RED     D0   // GPIO16  Red LED (220R to GND), optional
 
 #define DHT_TYPE        DHT11
 
 // LM393 comparator boards pull DO LOW when they trip.
 #define MQ5_ACTIVE_LOW  true
-#define SOIL_ACTIVE_LOW true
 
 // The TM1637 is mounted upside down in the box, so every frame is
 // rotated 180 degrees. Set to false if the digits read upside down.
@@ -45,8 +45,9 @@
 #define TEMP_DANGER_C         4.0f  // (*) no ice left, bacteria multiply fast
 #define WATER_WARN_CM         2.0f  // (*) meltwater building up, drain slowing
 #define WATER_DANGER_CM       5.0f  // (*) drain outlet blocked, fish soaking
-#define MQ3_WARN_ADC          350   // (*) alcohol / amine vapour rising
-#define MQ3_DANGER_ADC        550   // (*) rotten fish or chemical preservative
+#define MQ3_CLEAN_ADC         420   // MQ-135 in clean air (measured ~400 on this board, no divider)
+#define MQ3_WARN_ADC          550   // (*) MQ-135: ammonia / amine vapour rising
+#define MQ3_DANGER_ADC        750   // (*) MQ-135: rotting fish
 #define MQ3_MISSING_ADC       12    // A0 sits near 0 when nothing is connected
 
 // ---------------------------------------------------------------- timing

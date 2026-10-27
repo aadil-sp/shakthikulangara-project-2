@@ -137,6 +137,19 @@ class TestProtocol(unittest.TestCase):
         link._handle("[GATEWAY] Searching for car...")
         self.assertIn("Searching", link.messages.get_nowait())
 
+    def test_v2_gateway_lines_are_parsed(self):
+        link = SerialGatewayLink("none")
+        link._handle("T,30.0,9.5,200.0,-1.00,5,-48,-52,14,-80,80")
+        t = link.telemetry
+        self.assertEqual(t.sonar, (30.0, 9.5, 200.0))
+        self.assertTrue(t.guard_holding)
+        self.assertEqual(t.sonar_faults, ["front"])
+        self.assertEqual((t.car_rssi, t.gw_rssi, t.rtt_ms, t.pwm), (-48, -52, 14, (-80, 80)))
+        link._handle("S,1,3,19.5,1")
+        self.assertTrue(link.status.car_ok)
+        self.assertEqual(link.status.loss_pct, 3)
+        self.assertIn("loss 3%", link.radio_summary())
+
 
 class TestConfig(unittest.TestCase):
     def test_round_trip(self):

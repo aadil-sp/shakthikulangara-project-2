@@ -1,21 +1,28 @@
 """Cross-platform camera discovery and threaded capture (Windows, Linux, macOS)."""
 
 import glob
+import json
 import logging
 import os
 import platform
 import re
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 
 log = logging.getLogger("markerpilot.cameras")
 SYSTEM = platform.system()
+
+# Set when the OS refused camera access during the last search (macOS privacy)
+ACCESS_ERROR: Optional[str] = None
+MAC_ACCESS_HELP = ("macOS blocked the camera. Open System Settings > Privacy & Security > Camera, "
+                   "turn on the app you started MarkerPilot from (Terminal, iTerm, VS Code...), then restart it.")
 
 
 @dataclass
@@ -101,8 +108,68 @@ def _probe(index: int) -> Optional[Tuple[int, int]]:
         cap.release()
 
 
-def list_cameras(max_index: int = 10) -> List[CameraInfo]:
-    """Return every camera that actually delivers frames."""
+CAMERA_SEARCH_TIMEOUT_S = 90   # many cameras (phone, virtual, DSLR) can take a while to probe
+
+
+def list_cameras(max_index: int = 10, on_found: Optional[Callable[[CameraInfo], None]] = None) -> List[CameraInfo]:
+    """Return every camera that actually delivers frames. on_found is called
+    for each camera as soon as it answers, so a UI can list it straight away.
+
+    On macOS the search runs in a helper process: without camera permission
+    macOS kills the process that touches the camera, and that must not be the app."""
+    global ACCESS_ERROR
+    ACCESS_ERROR = None
+    if SYSTEM != "Darwin" or os.environ.get("MARKERPILOT_CAMERA_HELPER"):
+        return _list_cameras_here(max_index, on_found)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    code = ("import json; from markerpilot.vision.cameras import _list_cameras_here as f; "
+            "f(%d, lambda c: print('CAM' + json.dumps([c.source, c.name, c.width, c.height]), flush=True)); "
+            "print('DONE', flush=True)" % max_index)
+    env = dict(os.environ, MARKERPILOT_CAMERA_HELPER="1",
+               PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    try:
+        proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, env=env)
+    except OSError as e:
+        ACCESS_ERROR = f"Camera search failed: {e}"
+        return []
+    timed_out = threading.Event()
+    killer = threading.Timer(CAMERA_SEARCH_TIMEOUT_S, lambda: (timed_out.set(), proc.kill()))
+    killer.start()
+    cams: List[CameraInfo] = []
+    done = False
+    try:
+        for line in proc.stdout:
+            if line.startswith("CAM"):
+                s, n, w, h = json.loads(line[3:])
+                cam = CameraInfo(s, n, w, h)
+                cams.append(cam)
+                if on_found:
+                    on_found(cam)
+            elif line.startswith("DONE"):
+                done = True
+        proc.wait()
+    finally:
+        killer.cancel()
+    err = proc.stderr.read() if proc.stderr else ""
+    if done:
+        if not cams and "not authorized" in err:
+            ACCESS_ERROR = MAC_ACCESS_HELP
+        return cams
+    if cams:
+        log.warning("Camera search stopped early (exit %s); keeping %d camera(s)", proc.returncode, len(cams))
+        return cams
+    if timed_out.is_set():
+        ACCESS_ERROR = f"Camera search found nothing in {CAMERA_SEARCH_TIMEOUT_S} s"
+    elif proc.returncode < 0 or "not authorized" in err:
+        ACCESS_ERROR = MAC_ACCESS_HELP      # the helper died: macOS privacy killed it
+    else:
+        ACCESS_ERROR = f"Camera search failed (exit {proc.returncode})"
+    log.warning("Camera helper exited %s: %s", proc.returncode, err.strip()[-300:])
+    return []
+
+
+def _list_cameras_here(max_index: int = 10, on_found: Optional[Callable[[CameraInfo], None]] = None) -> List[CameraInfo]:
     cameras: List[CameraInfo] = []
     if SYSTEM == "Linux":
         candidates = _linux_devices()
@@ -114,7 +181,10 @@ def list_cameras(max_index: int = 10) -> List[CameraInfo]:
     for idx, name in candidates:
         res = _probe(idx)
         if res:
-            cameras.append(CameraInfo(idx, f"[{idx}] {name}", *res))
+            cam = CameraInfo(idx, f"[{idx}] {name}", *res)
+            cameras.append(cam)
+            if on_found:
+                on_found(cam)
             misses = 0
         else:
             misses += 1

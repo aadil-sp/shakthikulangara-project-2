@@ -4,8 +4,8 @@ Three science-fair projects, rewritten from scratch: firmware for every board, p
 
 | Project | Folder | Board | What it does |
 | :--- | :--- | :--- | :--- |
-| ⚡ **Electronics: HazardGuard C3** | [`electronics/hazardguard_c3`](electronics/hazardguard_c3) | ESP32-C3 | Gas leak, fire, danger-zone and tank-overflow protection with relay, buzzer, 3 LEDs, TM1637 and a phone dashboard |
-| 🐟 **IoT: Marine Fish Quality Monitor** | [`iot/fish_quality_monitor`](iot/fish_quality_monitor) | NodeMCU ESP8266 | Watches a fishing boat's fish hold: ice temperature (DHT11), meltwater height and blocked drain outlet (ultrasonic + moisture probe), rot and chemical gas (MQ-3, MQ-5). Logs the data, shows a summary on a TM1637 that flashes on faults, and gives the owner a phone dashboard and a built-in simulator. [Wiring sheet](iot/fish_quality_monitor/CONNECTIONS.md) |
+| ⚡ **Electronics: HazardGuard C3** | [`electronics/hazardguard_c3`](electronics/hazardguard_c3) | ESP32-C3 | LPG (MQ-5), alcohol/solvent vapour (MQ-3), overheating (DHT11) and water-leak (soil probe) alarm with green/yellow/red LEDs and a phone dashboard |
+| 🐟 **IoT: Marine Fish Quality Monitor** | [`iot/fish_quality_monitor`](iot/fish_quality_monitor) | NodeMCU ESP8266 | Watches a fishing boat's fish hold: ice temperature (DHT11), meltwater height and blocked drain outlet (ultrasonic), ammonia and methane from rotting fish (MQ-135, MQ-4). Logs the data, shows a summary on a TM1637 that flashes on faults, and gives the owner a phone dashboard, plus a laptop simulator. [Wiring sheet](iot/fish_quality_monitor/CONNECTIONS.md) |
 | 🤖 **Robotics: MarkerPilot** | [`robotics`](robotics) | ESP32 car + ESP32-C3 gateway | Ceiling camera + ArUco markers drive a robot car to clicked points or goal markers; Kalman filter, classic + RL brains, simulator |
 | 📄 **Reports** | [`reports`](reports) | – | PDF reports for all three, rebuilt by `python3 reports/build_reports.py` |
 
@@ -30,7 +30,7 @@ tools/flash.sh car              # MarkerPilot car           (ESP32-WROOM-32)
 tools/flash.sh gateway          # MarkerPilot USB gateway   (ESP32-C3)
 ```
 
-You need `arduino-cli` with the **esp32 core 3.x**, the **esp8266 core 3.x** (for the NodeMCU) and the libraries **DHT sensor library** (Adafruit) and **TM1637** (Avishay Orpaz). Add a port as the second argument if more than one board is plugged in.
+You need `arduino-cli` with the **esp32 core 3.x**, the **esp8266 core 3.x** (for the NodeMCU) and the libraries **DHT sensor library** (Adafruit) and **TM1637** (Avishay Orpaz, IoT only). Add a port as the second argument if more than one board is plugged in.
 
 | Board | Hotspot | Dashboard |
 | :--- | :--- | :--- |

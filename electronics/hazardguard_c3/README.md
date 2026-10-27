@@ -1,25 +1,25 @@
 # HazardGuard C3 ⚡
 
-A multi-hazard emergency controller for kitchens, hotel boiler rooms and workshops.
+A multi-hazard alarm for kitchens, hotel boiler rooms and workshops.
 
 | Hazard | Sensor | Danger action |
 | :--- | :--- | :--- |
-| LPG leak / smoke | MQ gas sensor | Relay ON (exhaust fan / gas valve), red strobe, fast beep, `GAS` |
-| Fire / overheating | DHT11 | Relay ON, `FIrE` |
-| Person in the danger zone | HC-SR04 | Relay ON, `ZonE` |
-| Tank overflow | HC-SR04 | Relay ON, `FuLL` |
+| LPG / gas leak | MQ-5 | Red strobe |
+| Alcohol / solvent vapour | MQ-3 | Red strobe |
+| Fire / overheating | DHT11 | Red strobe |
+| Water leak / flooding | Soil moisture probe | Red strobe |
 
 **Status lights**
 
 | Light | Meaning |
 | :--- | :--- |
 | Green | Safe |
-| Yellow blink + slow beep | Warning |
-| Red strobe + fast beep | Danger |
+| Yellow blink | Warning |
+| Red strobe | Danger |
 
-**Relay:** it stays on for 8 s after the danger clears, so a fan doesn't chatter.
+At power-up the LEDs light green, yellow, red in turn, so you can check all three by eye.
 
-**Gas warm-up:** gas alarms are held back for the first 60 s while the MQ heater warms up. During that time the yellow LED blips.
+**Gas warm-up:** gas alarms are held back for the first 60 s while the MQ heaters warm up. During that time the yellow LED blips.
 
 ## 📶 Phone dashboard
 
@@ -27,45 +27,40 @@ Join WiFi **`HazardGuard-C3`** (open by default). The dashboard opens by itself,
 
 From the dashboard you can:
 
-- see live gauges and history for gas, temperature/humidity and distance, plus a mirror of the 3 LEDs
+- see live gauges and history for LPG, alcohol, temperature/humidity and moisture, plus a mirror of the 3 LEDs
+- see which sensors are not connected
 - switch the profile: **Household / Hotel kitchen / Industrial**
-- set the relay to **Auto / Force ON / Force OFF**
-- silence the buzzer for 2 minutes
+- test the LEDs: **Green / Yellow / Red / All on / Cycle**
 - sound an optional siren on the phone
 - edit the thresholds; they're saved in flash and survive power cuts
 
 To password-protect the hotspot, set `AP_PASSWORD` in `config.h` to 8 or more characters.
 
-## ⚡ Wiring (ESP32-C3), same as the original build
+## ⚡ Wiring (ESP32-C3)
 
 | Part | Pin | Notes |
 | :--- | :--- | :--- |
-| MQ gas AO | GPIO 1 | 10k:10k divider if the module runs on 5 V |
-| TM1637 CLK / DIO | GPIO 2 / 3 | |
-| HC-SR04 TRIG / ECHO | GPIO 4 / 5 | ECHO through 1k:2k divider |
-| DHT11 DATA | GPIO 6 | 10k pull-up |
-| Buzzer | GPIO 7 | |
-| Relay IN | GPIO 10 | active LOW |
-| Green / Yellow LED | GPIO 0 / 8 | 220 Ω to GND |
-| Red LED | GPIO 9 | 3V3 → 220 Ω → LED → GPIO 9 (active LOW) |
+| MQ-5 AO | GPIO 1 | VCC 5V. DO not used |
+| MQ-3 AO | GPIO 4 | VCC 5V. DO not used |
+| Soil moisture AO | GPIO 0 | VCC **3V3**. DO not used |
+| DHT11 DATA | GPIO 6 | VCC 3V3 |
+| Green LED | GPIO 7 | 220 Ω to GND |
+| Yellow LED | GPIO 8 | 220 Ω to GND |
+| Red LED | GPIO 3 | 220 Ω to GND |
 
-## 7-segment codes
+Leave GPIO 2 and GPIO 9 empty. They are boot pins, and GPIO 9 is the BOOT button.
 
-| Code | Meaning |
-| :--- | :--- |
-| `SAFE` · gas · `25°C` · distance | Normal cycle |
-| `tttt` | Gas sensor warming up |
-| `GAS` / `FIrE` / `ZonE` / `FuLL` (flashing) | Danger |
-| `E1` / `E2` | DHT11 / ultrasonic not answering |
+The MQ AO pins are wired straight to the ESP32 with no divider, and the gas thresholds are set for that. Under very strong gas the AO voltage can go above 3.3 V, so keep test gas a short distance away from the sensor. With a 10k:10k divider on each AO line, halve the gas thresholds.
+
+**Soil probe calibration:** `SOIL_DRY_RAW` (probe in air) and `SOIL_WET_RAW` (probe in a cup of water) in `config.h`. The dashboard shows the raw value under the moisture gauge so you can read both.
 
 ## Changes from the first version
 
 - **Hotspot only:** no home-router connection and no saved WiFi password in the code, so the hotspot never hops channels.
-- **Missing sensors show as faults:** a disconnected sensor appears as a fault, not as a frozen 25 °C or 999 cm.
+- **Missing sensors show as faults:** a disconnected sensor appears as "not connected", not as a frozen value.
 - **Settings survive power cuts:** the profile and thresholds are saved in flash.
-- **Gas warm-up:** alarms wait until the MQ heater is ready.
-- **Relay hold time:** the relay doesn't flicker around the threshold.
-- **Buzzer mute.**
+- **Gas warm-up:** alarms wait until the MQ heaters are ready.
+- **LED test** at power-up and from the dashboard.
 
 ## Build & flash
 
@@ -75,4 +70,4 @@ tools/flash.sh electronics
 
 Or: `arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,FlashMode=dio electronics/hazardguard_c3`
 
-Libraries: DHT sensor library (Adafruit), TM1637 (Avishay Orpaz).
+Library: DHT sensor library (Adafruit).

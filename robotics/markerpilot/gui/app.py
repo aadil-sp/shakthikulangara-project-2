@@ -1,7 +1,6 @@
 """MarkerPilot desktop app (PyQt6)."""
 
 import math
-import platform
 import queue
 import sys
 import threading
@@ -17,12 +16,13 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QGridLa
                              QSplitter, QVBoxLayout, QWidget)
 
 from markerpilot import APP_NAME, __version__
-from markerpilot.comm.links import SerialGatewayLink, SimLink, list_serial_ports
+from markerpilot.comm.links import SerialGatewayLink, SimLink, find_gateway_port, list_serial_ports
 from markerpilot.config import AppConfig
 from markerpilot.control.rl import QAgent
 from markerpilot.engine import Engine
 from markerpilot.sim.world import SimWorld
 from markerpilot.vision import overlays
+from markerpilot.vision import cameras
 from markerpilot.vision.cameras import CameraSource, list_cameras
 
 STYLE = """
@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         self._keys = set()
         self._fps, self._fps_n, self._fps_t = 0.0, 0, time.monotonic()
         self._cams_result: Optional[list] = None
+        self._cams_found: Optional[queue.Queue] = None
         self._train_thread: Optional[threading.Thread] = None
         self._train_msgs: "queue.Queue[str]" = queue.Queue()
         self._out = None
@@ -250,7 +251,7 @@ class MainWindow(QMainWindow):
         grid.setVerticalSpacing(4)
         self.t_labels = {}
         rows = [("pose", "Position"), ("heading", "Heading"), ("speed", "Speed"), ("target", "To target"),
-                ("status", "Doing"), ("fps", "Camera / loop")]
+                ("status", "Doing"), ("fps", "Camera / loop"), ("radio", "Radio")]
         for i, (key, text) in enumerate(rows):
             grid.addWidget(QLabel(text), i, 0)
             lbl = QLabel("—", objectName="value")
@@ -314,24 +315,37 @@ class MainWindow(QMainWindow):
         self.cam_combo.addItem("Searching for cameras…", None)
         self.cam_combo.addItem("Add network / phone camera URL…", "url")
 
+        self._cams_found = queue.Queue()
+
         def worker():
             try:
-                self._cams_result = list_cameras()
+                self._cams_result = list_cameras(on_found=self._cams_found.put)
             except Exception as e:     # never let discovery kill the app
                 self._cams_result = []
                 self._train_msgs.put(f"Camera search failed: {e}")
-        if platform.system() == "Darwin":
-            # macOS camera permission must be requested on the main thread
-            QTimer.singleShot(400, worker)
-        else:
-            threading.Thread(target=worker, daemon=True).start()
+            if cameras.ACCESS_ERROR:
+                self._train_msgs.put(cameras.ACCESS_ERROR)
+        # On macOS the search runs in a helper process, so a thread is safe everywhere
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _add_camera(self, c) -> None:
+        """List one camera as soon as the search finds it."""
+        if self.cam_combo.findData(c.source) >= 0:
+            return
+        searching = self.cam_combo.findData(None)
+        pos = searching if searching >= 0 else self.cam_combo.count() - 1
+        self.cam_combo.insertItem(pos, f"📷 {c.label}", c.source)
+        searching = self.cam_combo.findData(None)
+        if searching >= 0:
+            n = self.cam_combo.count() - 3
+            self.cam_combo.setItemText(searching, f"Searching for more cameras… ({n} found)")
 
     def _fill_cameras(self, cams: List) -> None:
+        for c in cams:
+            self._add_camera(c)
         idx = self.cam_combo.findData(None)
         if idx >= 0:
             self.cam_combo.removeItem(idx)
-        for c in cams:
-            self.cam_combo.insertItem(self.cam_combo.count() - 1, f"📷 {c.label}", c.source)
         self.log(f"Found {len(cams)} camera(s)" + (": " + ", ".join(c.label for c in cams) if cams else ""))
         current = self.cam_combo.findData(self.source)
         self.cam_combo.setCurrentIndex(max(0, current))
@@ -354,13 +368,20 @@ class MainWindow(QMainWindow):
             self._set_link("sim")
             self.log("Using the simulator camera")
             return
+        if cameras.ACCESS_ERROR and isinstance(src, int):
+            self.log(cameras.ACCESS_ERROR)
+            return
         self.camera = CameraSource(src, self.cfg.vision.frame_width, self.cfg.vision.frame_height)
         self.camera.start()
         self.source = src
         self.engine.localizer.reset()
         self.log(f"Opened camera {src}")
         if isinstance(self.link, SimLink):
-            self._set_link("none")
+            # Real camera: connect the gateway straight away if it's plugged in
+            port = find_gateway_port() or "none"
+            self._set_link(port)
+            if port != "none":
+                self.log(f"Connected to the gateway on {port}")
 
     def _set_link(self, which) -> None:
         if not isinstance(self.link, SimLink):
@@ -375,6 +396,7 @@ class MainWindow(QMainWindow):
             link = SerialGatewayLink(which, self.cfg.link.baudrate)
             if link.connect():
                 self.cfg.link.serial_port = which
+                link.set_guard(self.cfg.link.guard_cm)
             self.link = link
         self.refresh_ports()
 
@@ -483,6 +505,8 @@ class MainWindow(QMainWindow):
         dt = min(0.1, now - self._t_prev)
         self._t_prev = now
 
+        while self._cams_found is not None and not self._cams_found.empty():
+            self._add_camera(self._cams_found.get())
         if self._cams_result is not None:
             cams, self._cams_result = self._cams_result, None
             self._fill_cameras(cams)
@@ -553,6 +577,14 @@ class MainWindow(QMainWindow):
         L["status"].setText(out.status)
         cam_fps = self.camera.fps if self.camera else self._fps
         L["fps"].setText(f"{cam_fps:4.0f} fps / {self._fps:4.0f} fps")
+        radio = self.link.radio_summary()
+        if tele is not None and tele.battery_v > 0:
+            radio += f" · battery {tele.battery_v:.1f} V"
+        if tele is not None and tele.guard_holding:
+            radio += " · GUARD STOP"
+        if tele is not None and tele.sonar_faults:
+            radio += " · sonar fault: " + ", ".join(tele.sonar_faults)
+        L["radio"].setText(radio)
 
         for key, val in (("pwm_l", out.pwm[0]), ("pwm_r", out.pwm[1])):
             b, lbl = self.bars[key]

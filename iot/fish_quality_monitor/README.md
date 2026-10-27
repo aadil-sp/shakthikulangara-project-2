@@ -8,10 +8,9 @@ An IoT monitor for the insulated fish hold of a fishing boat. It logs the hold's
 | :--- | :--- | :--- |
 | **Ice running out** | DHT11 | Ice should hold the fish at 0 °C. Above 1 °C the ice is melting; above 4 °C there's no ice left. |
 | **Drain outlet blocked** | HC-SR04 ultrasonic | Measures the height of the meltwater on the floor. Too much water means the outlet is blocked and the fish are soaking. |
-| **Water reaching the fish** | Soil moisture probe | Sits at the level of the bottom fish. Wet means the water has reached them. |
-| **Rotten fish or chemicals** | MQ-3 | Alcohol / amine vapour rises as fish rot, or when a chemical preservative has been used. |
-| **Spoilage gas** | MQ-5 | Trips on decomposition gases. |
-| **Alarm light** | Red LED | Off = OK, slow blink = warning, fast blink = danger. |
+| **Rotting fish** | MQ-135 | Ammonia and amine (the "fishy" trimethylamine) level rises as fish rot. |
+| **Deep decay** | MQ-4 | Trips on methane from decomposition. |
+| **Alarm light** (optional) | Red LED | Off = OK, slow blink = warning, fast blink = danger. |
 
 From these it works out a **freshness score (0–100)** and a grade: FRESH, GOOD, CHECK or SPOILED.
 
@@ -23,7 +22,7 @@ The display only shows summary values, one after another:
 | :--- | :--- |
 | ` 1°C` | hold temperature |
 | `H  3` | meltwater height in cm |
-| `AL18` | MQ-3 gas level (% of full scale) |
+| `nH41` | MQ-135 ammonia level (% of full scale) |
 | `Fr92` | freshness score |
 
 When anything goes abnormal the display **flashes** the fault code, then its value:
@@ -32,9 +31,9 @@ When anything goes abnormal the display **flashes** the fault code, then its val
 | :--- | :--- | :--- |
 | `ICE` | temperature above the limit | add crushed ice |
 | `drAn` | meltwater too high, or water at the fish | open / clear the drain outlet |
-| `ALCO` | alcohol / chemical vapour | inspect the catch for rotten fish or chemicals |
-| `rOt` | MQ-5 spoilage gas | remove spoiled fish |
-| `E-dH` `E-US` `E-AL` | DHT11 / ultrasonic / MQ-3 not answering | check the wiring |
+| `nH3` | ammonia / amines high | inspect the catch for rotting fish |
+| `CH4` | MQ-4 methane | remove spoiled fish |
+| `E-dH` `E-US` `E-nH` | DHT11 / ultrasonic / MQ-135 not answering | check the wiring |
 | `PrE` + countdown | gas sensors warming up (first 60 s) | wait |
 
 ## Dashboard for the owner
@@ -56,14 +55,14 @@ You can change the alarm limits from the dashboard and download the log.
 ## Logging
 
 - **RAM:** a sample every 10 s, for the last 30 minutes. This feeds the chart.
-- **Flash (LittleFS):** one CSV row per minute, kept through power cuts. Download it with **Download log (CSV)** or from `http://192.168.4.1/log.csv`. Each row has the time, mode, temperature, humidity, water height, water-at-fish, MQ-3, MQ-5, freshness and status. When the log reaches 768 KB (about 9 days of rows) it moves to `log_old.csv` and a new log starts, so the last 9–18 days are always kept. `http://192.168.4.1/log.csv?old=1` downloads the older file.
+- **Flash (LittleFS):** one CSV row per minute, kept through power cuts. Download it with **Download log (CSV)** or from `http://192.168.4.1/log.csv`. Each row has the time, mode, temperature, humidity, water height, water-at-fish (always 0, no probe fitted), MQ-135, MQ-4, freshness and status. When the log reaches 768 KB (about 9 days of rows) it moves to `log_old.csv` and a new log starts, so the last 9–18 days are always kept. `http://192.168.4.1/log.csv?old=1` downloads the older file.
 - **Clock:** the board has no clock chip. When a phone opens the dashboard it gives the board the real time, so log rows get real dates.
 
 ## Simulator
 
 The simulator is a separate page for a laptop: **[`simulator.html`](simulator.html)**. Double-click it; you don't need the board or the internet.
 
-- The full dashboard is on the left. The **sliders** are beside it: ice temperature, meltwater height, MQ-3 gas, humidity, and buttons for MQ-5 spoilage gas and water at the fish.
+- The full dashboard is on the left. The **sliders** are beside it: ice temperature, meltwater height, MQ-135 level, humidity, and a button for the MQ-4 methane trip.
 - One-tap scenes set up a situation for you: **Fresh catch**, **Ice melting**, **Drain blocked**, **Rotten fish**, **Chemical used**.
 - **Voyage story** plays a 4-minute trip that goes through every alarm.
 - The alarms, freshness score, box-display copy, red LED and log behave exactly as the firmware does. The simulator uses the same rules and the same limits.
@@ -81,10 +80,9 @@ See **[CONNECTIONS.md](CONNECTIONS.md)** for the full wiring sheet: the pin tabl
 | TM1637 CLK / DIO | D5 / D6 |
 | DHT11 | D4 |
 | HC-SR04 TRIG / ECHO | D7 / D8 (ECHO through a 1k/2k divider) |
-| MQ-3 AO | A0 |
-| MQ-5 DO | D1 (through 4.7 kΩ) |
-| Soil probe DO | D2 |
-| Red LED | D0 (through 220 Ω) |
+| MQ-135 AO | A0 |
+| MQ-4 DO | D1 |
+| Red LED (optional) | D0 (through 220 Ω) |
 
 ## Flash
 
