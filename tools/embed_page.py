@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Embed a dashboard HTML file into a firmware header as a PROGMEM string.
 
-    python3 tools/embed_page.py iot/fish_quality_monitor/dashboard/index.html iot/fish_quality_monitor/webpage.h
+    python3 tools/embed_page.py iot/fish_quality_monitor/dashboard/index.html iot/fish_quality_monitor/webpage.h [simulator.html]
 
-The HTML file stays the single source: open it straight in a browser and it
-runs as an offline simulator; flash the header and the board serves it.
+The HTML file stays the single source. The board serves it as the live
+dashboard. The optional third argument writes a copy that always starts as the
+laptop simulator (sliders beside the dashboard, no board needed).
 """
 import re
 import sys
@@ -19,3 +20,8 @@ with open(dst, "w", encoding="utf-8") as f:
     f.write("#pragma once\n#include <pgmspace.h>\n")
     f.write('const char PAGE_HTML[] PROGMEM = R"PAGE(' + html + ')PAGE";\n')
 print(f"{dst}: {len(html.encode())} bytes")
+if len(sys.argv) > 3:
+    full = open(src, encoding="utf-8").read().replace("<script>", "<script>window.SIM=1;</script>\n<script>", 1)
+    full = full.replace("<title>Fish Hold Monitor</title>", "<title>Fish Hold Simulator</title>", 1)
+    open(sys.argv[3], "w", encoding="utf-8").write(full)
+    print(f"{sys.argv[3]}: simulator copy")

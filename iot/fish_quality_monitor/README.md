@@ -61,19 +61,16 @@ You can change the alarm limits from the dashboard and download the log.
 
 ## Simulator
 
-There are two ways to see the project working without sensors.
+The simulator is a separate page for a laptop: **[`simulator.html`](simulator.html)**. Double-click it; you don't need the board or the internet.
 
-**On the board.** It starts in simulator mode (`START_IN_SIMULATOR` in `config.h`). The simulator goes through the same alarm, display, LED and logging code as the real sensors. The dashboard has three modes:
+- The full dashboard is on the left. The **sliders** are beside it: ice temperature, meltwater height, MQ-3 gas, humidity, and buttons for MQ-5 spoilage gas and water at the fish.
+- One-tap scenes set up a situation for you: **Fresh catch**, **Ice melting**, **Drain blocked**, **Rotten fish**, **Chemical used**.
+- **Voyage story** plays a 4-minute trip that goes through every alarm.
+- The alarms, freshness score, box-display copy, red LED and log behave exactly as the firmware does. The simulator uses the same rules and the same limits.
 
-| Mode | What happens |
-| :--- | :--- |
-| **Voyage story** | A 4-minute loop: fresh catch → ice melting → drain outlet blocked → outlet cleared → fish starting to rot → fresh ice. Every alarm fires in turn. |
-| **Manual sliders** | Set the temperature, water, MQ-3 gas and humidity yourself, and toggle the MQ-5 and the wet probe. |
-| **Live sensors** | The real sensors. A missing sensor shows **NO SENSOR**, never a fake number. |
+The real board doesn't show any simulator controls. Its page at 192.168.4.1 is only the live dashboard for the owner.
 
-The board remembers the mode through a restart.
-
-**On a laptop, with no board.** Open [`dashboard/index.html`](dashboard/index.html) in a browser. The same page runs an offline copy of the firmware logic, so it works as a stand-alone simulator.
+*Exhibition without sensors?* The board can still play the voyage story on its own box display and LED. Open `http://192.168.4.1/api/settings?mode=sim&story=1`, and `?mode=live` puts it back. The dashboard then shows a **DEMO DATA** label.
 
 ## Wiring
 
@@ -97,7 +94,7 @@ tools/flash.sh iot          # from the repository root
 
 You need arduino-cli with the **esp8266** core (3.x) and the libraries **DHT sensor library** (Adafruit) and **TM1637** (Avishay Orpaz). Serial output is at 115200 baud and prints one line a second.
 
-The dashboard source is `dashboard/index.html`. After editing it, run `python3 tools/embed_page.py iot/fish_quality_monitor/dashboard/index.html iot/fish_quality_monitor/webpage.h` to rebuild `webpage.h`.
+The dashboard source is `dashboard/index.html`. After editing it, run `python3 tools/embed_page.py iot/fish_quality_monitor/dashboard/index.html iot/fish_quality_monitor/webpage.h` to rebuild `webpage.h`. The same command rebuilds `simulator.html`.
 
 ## Files
 
@@ -106,5 +103,6 @@ The dashboard source is `dashboard/index.html`. After editing it, run `python3 t
 | `fish_quality_monitor.ino` | Firmware: sensors, simulator, alarms, display, LED, logging, web server |
 | `config.h` | Pins, hotspot name, default limits, timings |
 | `webpage.h` | The dashboard, embedded (generated) |
-| `dashboard/index.html` | The dashboard source, which is also the offline simulator |
+| `dashboard/index.html` | The dashboard source |
+| `simulator.html` | Laptop simulator with sliders beside the dashboard (generated from the same source) |
 | `CONNECTIONS.md` | Wiring sheet |

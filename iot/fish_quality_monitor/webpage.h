@@ -18,7 +18,15 @@ header .row{display:flex;align-items:center;gap:10px;max-width:1080px;margin:aut
 header h1{font-size:18px;margin:0;flex:1;letter-spacing:.2px}header small{display:block;font-weight:400;opacity:.8;font-size:12px}
 .pill{font-size:12px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.18);white-space:nowrap}
 .pill.off{background:#7a1f1f}
-main{max-width:1080px;margin:-34px auto 0;padding:0 16px 40px;display:grid;gap:14px}
+main{display:grid;gap:14px;min-width:0}
+.wrap{max-width:1080px;margin:-34px auto 0;padding:0 16px 40px}
+aside{display:none}
+body.sim .wrap{max-width:1440px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+body.sim aside{display:block;position:sticky;top:12px}
+aside h3{font-size:15px;margin:0 0 4px}
+.led{display:inline-block;width:14px;height:14px;border-radius:50%;background:#3a1714;vertical-align:middle;margin-left:8px;border:1px solid #000}
+.led.on{background:#ff2a1a;box-shadow:0 0 10px #ff2a1a}
+@media (max-width:900px){body.sim .wrap{grid-template-columns:1fr}body.sim aside{position:static;order:-1}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 .card h2{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:600}
 .hero{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
@@ -74,6 +82,7 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 <h1>Fish Hold Monitor<small>Marine catch quality · ice · meltwater · spoilage gas</small></h1>
 <span class="pill" id="mode">…</span><span class="pill" id="link">connecting</span>
 </div></header>
+<div class="wrap">
 <main>
 <section class="card hero">
 <svg class="ring" viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="50"/>
@@ -108,22 +117,11 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 <div class="s">Above 80 % is normal for a hold packed with ice</div></div>
 </section>
 <section class="two">
-<div class="card"><h2>Box display (TM1637)</h2>
+<div class="card"><h2>Box display (TM1637) &amp; red LED <span class="led" id="led"></span></h2>
 <div class="seg"><svg id="segs" viewBox="0 0 300 110"></svg></div>
 <div class="note">The box display shows a rotating summary (temperature, water, gas, freshness) and flashes the fault code when anything goes abnormal: ICE, drAn, ALCO, rOt.</div></div>
 <div class="card"><h2>Trend · last 30 minutes</h2><canvas id="chart"></canvas>
 <div class="legend"><span style="--c:#e8483b">Temp °C</span><span style="--c:#3d9bd6">Water cm</span><span style="--c:#9b59b6">Gas ÷10</span><span style="--c:#16865a">Freshness ÷10</span></div></div>
-</section>
-<section class="card"><h2>Simulator</h2>
-<div class="seg-tabs" id="modeTabs"><button data-m="live">Live sensors</button><button data-m="story">Voyage story</button><button data-m="manual">Manual sliders</button></div>
-<div id="manual">
-<label class="sl">Ice temperature<input type="range" id="sT" min="-2" max="12" step="0.5"><output id="oT"></output></label>
-<label class="sl">Meltwater<input type="range" id="sW" min="0" max="12" step="0.5"><output id="oW"></output></label>
-<label class="sl">MQ-3 gas<input type="range" id="sG" min="0" max="1023" step="1"><output id="oG"></output></label>
-<label class="sl">Humidity<input type="range" id="sH" min="30" max="100" step="1"><output id="oH"></output></label>
-<div class="tg"><button id="bRot">MQ-5 spoilage gas</button><button id="bWet">Water at fish (probe wet)</button></div>
-</div>
-<div class="note" id="simNote"></div>
 </section>
 <section class="card"><h2>Alarm limits &amp; fish hold</h2>
 <div class="grid-set">
@@ -142,13 +140,30 @@ label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{fle
 </section>
 <footer id="foot">Marine Fish Quality Monitor · NodeMCU ESP8266</footer>
 </main>
+<aside class="card" id="simPanel">
+<h3>Simulator</h3>
+<div class="note" style="margin:0 0 10px">No board needed. Move the sliders and the dashboard reacts exactly as the NodeMCU would: alarms, box display, red LED, freshness and log.</div>
+<div class="seg-tabs" id="modeTabs"><button data-m="manual">Manual sliders</button><button data-m="story">Voyage story</button></div>
+<div id="manual">
+<label class="sl">Ice temperature<input type="range" id="sT" min="-2" max="12" step="0.5"><output id="oT"></output></label>
+<label class="sl">Meltwater height<input type="range" id="sW" min="0" max="12" step="0.5"><output id="oW"></output></label>
+<label class="sl">MQ-3 gas<input type="range" id="sG" min="0" max="1023" step="1"><output id="oG"></output></label>
+<label class="sl">Humidity<input type="range" id="sH" min="30" max="100" step="1"><output id="oH"></output></label>
+<div class="tg"><button id="bRot">MQ-5 spoilage gas</button><button id="bWet">Water at fish (probe wet)</button></div>
+<div class="tg" style="margin-top:10px"><button class="btn" data-p="fresh">Fresh catch</button><button class="btn" data-p="melt">Ice melting</button><button class="btn" data-p="clog">Drain blocked</button><button class="btn" data-p="rot">Rotten fish</button><button class="btn" data-p="chem">Chemical used</button></div>
+</div>
+<div class="note" id="simNote"></div>
+</aside>
+</div>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
 const AL={ICE:1,DRAIN:2,ALCO:4,ROT:8,SENSOR:16};
-let D=null,lastOk=0,standalone=location.protocol==="file:"||/[?&]demo/.test(location.search),everOk=false,editing=0;
+let D=null,lastOk=0,standalone=!!window.SIM||location.protocol==="file:"||/[?&]demo/.test(location.search),everOk=false,editing=0;
+function enterSim(){standalone=true;document.body.classList.add("sim")}
+if(standalone)enterSim();
 /* ---------- offline twin of the firmware (used when the page is opened without the board) ---------- */
-const twin={t0:Date.now(),cfg:{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1},sim:1,story:1,
+const twin={t0:Date.now(),cfg:{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1},sim:1,story:0,
 man:{t:0.5,h:92,w:0.8,g:190,r:false,wet:false},hist:[],lastH:0,
 up(){return (Date.now()-this.t0)/1000},
 ramp(t,a,b,x,y){if(t<=a)return x;if(t>=b)return y;const k=(t-a)/(b-a);return x+(y-x)*k*k*(3-2*k)},
@@ -200,6 +215,7 @@ const list=[0,1,2,3,4].filter(i=>f.alerts&(1<<i)),slot=Math.floor(ms/1200),w=lis
 if(ms%500>=330){segShow("    ");return}
 segShow([val?tmp:"ICE ",val?wat:"drAn",val?gas:"ALCO",val?"GAS ":"rOt ",f.temp==null?tmp:f.water==null?wat:gas][w]);}
 setInterval(segFrame,100);
+setInterval(()=>{if(!D)return;const ms=Date.now(),l=D.level;$("led").classList.toggle("on",l==="danger"?ms%200<100:l==="warn"?ms%1000<500:D.warmup>0?ms%2000<60:false)},50);
 /* ---------- rendering ---------- */
 const tagTxt={ok:"OK",warn:"WARNING",danger:"DANGER"};
 function tag(el,lv,na){el.className="tag "+(na?"na":lv==="ok"?"":lv);el.textContent=na?"NO SENSOR":tagTxt[lv]}
@@ -215,10 +231,11 @@ if(f.alerts&AL.ROT)A.push(["danger","Spoilage gas","MQ-5 tripped. Fish may be ro
 if(f.alerts&AL.ALCO)A.push([f.gasLv==="danger"?"danger":"warn","Alcohol / chemical vapour",f.gasLv==="danger"?"Strong vapour: rotten fish or a chemical preservative used on the catch.":"Vapour rising. Early spoilage. Check the catch soon."]);
 if(f.alerts&AL.DRAIN)A.push([f.waterLv,"Meltwater",f.waterLv==="danger"?"Water "+fmt(f.water,1)+" cm. The drain outlet is blocked. Open it now, the fish are soaking.":(f.wet?"Water has reached the fish. Check the drain outlet.":"Water building up ("+fmt(f.water,1)+" cm). The drain is slowing.")]);
 if(f.alerts&AL.ICE)A.push([f.tempLv,"Ice",f.tempLv==="danger"?"Hold at "+fmt(f.temp,1)+" °C. No ice left. Add crushed ice immediately.":"Above 0 °C. The ice is melting. Top up the ice."]);
-if(f.alerts&AL.SENSOR)A.push(["warn","Sensor check",["temp","water","mq3"].filter(k=>f[k]==null).map(k=>({temp:"DHT11",water:"ultrasonic",mq3:"MQ-3"})[k]).join(", ")+" not answering. Check the wiring, or switch to the simulator."]);
+if(f.alerts&AL.SENSOR)A.push(["warn","Sensor check",["temp","water","mq3"].filter(k=>f[k]==null).map(k=>({temp:"DHT11",water:"ultrasonic",mq3:"MQ-3"})[k]).join(", ")+" not answering. Check the wiring (see CONNECTIONS.md)."]);
 $("alerts").innerHTML=A.length?A.map(a=>`<li class="a-${a[0]}"><b>${a[1]}</b><span>${a[2]}</span></li>`).join(""):`<li class="a-ok"><b>All good</b><span>Ice is holding, the drain is clear and no spoilage gas.</span></li>`;
 $("advice").textContent=f.warmup>0?"Gas sensors warming up: "+f.warmup+" s":f.level==="ok"?"Catch is in good condition":f.level==="warn"?"Something needs attention":"Act now to save the catch";
 $("phase").textContent=f.sim?(f.story?"Simulator · voyage story: "+f.phase:"Simulator · manual values"):"";
+if(!f.sim&&!standalone)$("phase").textContent="";
 // temperature
 tag($("tTag"),f.tempLv,f.temp==null);$("tV").textContent=fmt(f.temp,1);
 $("tBar").style.width=f.temp==null?0:pct(f.temp,-2,12)+"%";$("tBar").style.background=col[f.tempLv];
@@ -236,11 +253,11 @@ $("mq5").className="chip"+(f.mq5?" on":"");$("mq5").textContent="MQ-5 spoilage g
 $("wet").className="chip"+(f.wet?" on":"");$("wet").textContent="Water at fish: "+(f.wet?"YES":"no");
 $("hV").textContent=fmt(f.hum,0);$("hBar").style.width=f.hum==null?0:f.hum+"%";
 // mode
-$("mode").textContent=f.sim?"SIMULATOR":"LIVE SENSORS";
-const m=!f.sim?"live":f.story?"story":"manual";
+$("mode").textContent=standalone?"SIMULATOR":f.sim?"DEMO DATA":"LIVE SENSORS";
+const m=f.story?"story":"manual";
 document.querySelectorAll("#modeTabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
 $("manual").style.display=m==="manual"?"":"none";
-$("simNote").textContent=m==="live"?"Reading the real sensors. Missing sensors show as NO SENSOR, never a fake number.":m==="story"?"A 4-minute voyage plays through every alarm: ice melting, blocked drain, rotting fish, then fresh ice. Live: "+f.phase:"Move the sliders. The board's display, red LED, alarms and log react exactly as with real sensors.";
+$("simNote").textContent=m==="story"?"A 4-minute voyage plays through every alarm: ice melting, blocked drain, rotting fish, then fresh ice. Live: "+f.phase:"Drag a slider or tap a scene. The values go through the same alarm and freshness rules as the firmware.";
 if(m==="manual"&&!editing){$("sT").value=f.temp;$("sW").value=f.water;$("sG").value=f.mq3;$("sH").value=f.hum;$("bRot").classList.toggle("on",f.mq5);$("bWet").classList.toggle("on",f.wet);showOut()}
 if(document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="SELECT"){
 $("cTw").value=c.tw;$("cTd").value=c.td;$("cWw").value=c.ww;$("cWd").value=c.wd;$("cGw").value=c.gw;$("cGd").value=c.gd;$("cDepth").value=c.depth;$("cFlip").value=c.flip}
@@ -263,8 +280,10 @@ for(const[i,c,k]of ser){x.strokeStyle=c;x.lineWidth=2;x.beginPath();let pen=fals
 p.forEach((r,j)=>{if(r[i]==null){pen=false;return}const X=L+j/(n-1)*pw,Y=T+ph-Math.max(0,Math.min(max,r[i]*k))/max*ph;pen?x.lineTo(X,Y):x.moveTo(X,Y);pen=true});x.stroke()}}
 /* ---------- controls ---------- */
 async function send(path){try{D=await api(path);render()}catch(e){}}
+const PRESET={fresh:[0.5,0.8,190,92,0,0],melt:[3,1.8,200,90,0,0],clog:[2,7,210,95,0,1],rot:[6,1.5,640,88,1,0],chem:[0.5,0.8,600,92,0,0]};
+document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{const p=PRESET[b.dataset.p];editing=0;send(`/api/sim?t=${p[0]}&w=${p[1]}&g=${p[2]}&h=${p[3]}&r=${p[4]}&wet=${p[5]}`)});
 document.querySelectorAll("#modeTabs button").forEach(b=>b.onclick=()=>{const m=b.dataset.m;
-if(m==="live")send("/api/settings?mode=live");else if(m==="story")send("/api/settings?mode=sim&story=1");
+if(m==="story")send("/api/settings?mode=sim&story=1");
 else send("/api/sim?t="+(D&&D.temp!=null?D.temp:0.5)+"&w="+(D&&D.water!=null?D.water:1)+"&g="+(D&&D.mq3!=null?D.mq3:190)+"&h="+(D&&D.hum!=null?D.hum:90))});
 let simTimer;
 function pushSim(){editing=Date.now();showOut();clearTimeout(simTimer);simTimer=setTimeout(()=>send("/api/sim?t="+$("sT").value+"&w="+$("sW").value+"&g="+$("sG").value+"&h="+$("sH").value),120)}
@@ -280,7 +299,7 @@ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.jo
 async function poll(){
 if(editing&&Date.now()-editing>1500)editing=0;
 try{D=await api("/api/data");lastOk=Date.now();everOk=true;render();$("link").textContent=standalone?"offline demo":"live";$("link").className="pill"}
-catch(e){if(!everOk&&!standalone&&Date.now()-start>4000){standalone=true;return}
+catch(e){if(!everOk&&!standalone&&Date.now()-start>4000){enterSim();return}
 if(Date.now()-lastOk>4000){$("link").textContent="CONNECTION LOST";$("link").className="pill off";$("grade").textContent="NO LINK";$("grade").style.color="var(--mute)";$("advice").textContent="Rejoin the Boat-Fish-Monitor WiFi"}}}
 const start=Date.now();
 if(!standalone)fetch("/api/time?t="+Math.floor(Date.now()/1000)).catch(()=>{});

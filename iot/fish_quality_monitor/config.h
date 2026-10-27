@@ -58,8 +58,10 @@
 #define LOG_PERIOD_MS         60000 // one CSV row per minute in flash
 #define LOG_MAX_BYTES         786432 // rotate log.csv -> log_old.csv at 768 KB (~9 days)
 
-// Start in simulator mode until real sensors are fitted. The dashboard can
-// switch modes at any time and the choice is remembered.
-#define START_IN_SIMULATOR    true
+// The board reads the real sensors. The simulator with sliders is the
+// separate simulator.html page for a laptop. For an exhibition without
+// sensors, the board can still play the voyage story on its own display:
+// open http://192.168.4.1/api/settings?mode=sim&story=1 (mode=live to undo).
+#define START_IN_SIMULATOR    false
 
 #endif

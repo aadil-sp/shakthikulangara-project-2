@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fish Hold Simulator</title>
+<style>
+:root{--bg:#eef4f7;--card:#fff;--ink:#0b2230;--mute:#5b7280;--line:#d6e2e8;--sea:#0e6e8c;--sea2:#0a4d63;
+--ok:#16865a;--warn:#c27c00;--bad:#c62828;--water:#3d9bd6;--ice:#bfe6f5;--seg:#e8483b;--segoff:#3a1714;--panel:#10161a}
+@media (prefers-color-scheme:dark){:root{--bg:#081419;--card:#0f2129;--ink:#e3eef2;--mute:#8aa3ae;--line:#1d3743;
+--sea:#3fb4d6;--sea2:#7fd2ea;--ok:#3ccf8e;--warn:#f0b43a;--bad:#ff6b5e;--water:#4aa8e0;--ice:#1d4a5c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:linear-gradient(120deg,var(--sea2),var(--sea));color:#fff;padding:14px 16px 46px}
+header .row{display:flex;align-items:center;gap:10px;max-width:1080px;margin:auto}
+header h1{font-size:18px;margin:0;flex:1;letter-spacing:.2px}header small{display:block;font-weight:400;opacity:.8;font-size:12px}
+.pill{font-size:12px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.18);white-space:nowrap}
+.pill.off{background:#7a1f1f}
+main{display:grid;gap:14px;min-width:0}
+.wrap{max-width:1080px;margin:-34px auto 0;padding:0 16px 40px}
+aside{display:none}
+body.sim .wrap{max-width:1440px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+body.sim aside{display:block;position:sticky;top:12px}
+aside h3{font-size:15px;margin:0 0 4px}
+.led{display:inline-block;width:14px;height:14px;border-radius:50%;background:#3a1714;vertical-align:middle;margin-left:8px;border:1px solid #000}
+.led.on{background:#ff2a1a;box-shadow:0 0 10px #ff2a1a}
+@media (max-width:900px){body.sim .wrap{grid-template-columns:1fr}body.sim aside{position:static;order:-1}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h2{font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--mute);margin:0 0 10px;font-weight:600}
+.hero{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.ring{width:118px;height:118px}.ring circle{fill:none;stroke-width:11}.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:var(--ok);stroke-linecap:round;transition:stroke-dashoffset .6s,stroke .3s}
+.ring text{fill:var(--ink);font-weight:700;text-anchor:middle}
+.grade{font-size:30px;font-weight:800;letter-spacing:.5px}.advice{color:var(--mute);margin-top:2px}
+.alerts{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;text-align:left}
+.alerts li{border-radius:10px;padding:8px 10px;font-size:14px;display:flex;gap:8px}
+.alerts li b{white-space:nowrap}
+.a-warn{background:color-mix(in srgb,var(--warn) 14%,transparent);border-left:4px solid var(--warn)}
+.a-danger{background:color-mix(in srgb,var(--bad) 14%,transparent);border-left:4px solid var(--bad)}
+.a-ok{background:color-mix(in srgb,var(--ok) 12%,transparent);border-left:4px solid var(--ok)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.tile .v{font-size:32px;font-weight:750}.tile .u{font-size:15px;color:var(--mute);font-weight:500;margin-left:3px}
+.tile .s{font-size:13px;margin-top:4px;color:var(--mute)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;vertical-align:middle;color:#fff;background:var(--ok)}
+.tag.warn{background:var(--warn)}.tag.danger{background:var(--bad)}.tag.na{background:var(--mute)}
+.bar{height:8px;border-radius:9px;background:var(--line);margin-top:10px;position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:var(--sea);transition:width .5s}
+.bar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.35}
+.hold{width:100%;height:96px;margin-top:6px}
+.chip{display:inline-block;font-size:12px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);margin:6px 6px 0 0}
+.chip.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.seg{background:var(--panel);border-radius:10px;padding:12px;display:flex;justify-content:center}
+.seg svg{width:100%;max-width:300px;height:auto}
+canvas{width:100%;height:190px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mute);margin-top:6px}
+.legend span:before{content:"";display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;background:var(--c)}
+.seg-tabs{display:flex;background:var(--line);border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.seg-tabs button{flex:1;border:0;background:transparent;color:var(--ink);padding:8px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer}
+.seg-tabs button.on{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+label.sl{display:grid;grid-template-columns:120px 1fr 56px;gap:8px;align-items:center;font-size:13px;margin:8px 0}
+label.sl output{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+input[type=range]{width:100%;accent-color:var(--sea)}
+.tg{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.tg button,.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer}
+.tg button.on{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.pri{background:var(--sea);border-color:var(--sea);color:#fff}
+.grid-set{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.grid-set label{font-size:12px;color:var(--mute);display:grid;gap:4px}
+.grid-set input{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.note{font-size:12px;color:var(--mute);margin-top:8px}
+.phase{font-size:13px;margin-top:6px;color:var(--sea)}
+footer{text-align:center;font-size:12px;color:var(--mute);padding-bottom:20px}
+@media (max-width:640px){.two{grid-template-columns:1fr}.hero{grid-template-columns:1fr;justify-items:center;text-align:center}
+label.sl{grid-template-columns:96px 1fr 50px}.hero>div{width:100%}.alerts li{flex-direction:column;gap:2px}header{padding-bottom:42px}}
+</style>
+</head>
+<body>
+<header><div class="row">
+<h1>Fish Hold Monitor<small>Marine catch quality · ice · meltwater · spoilage gas</small></h1>
+<span class="pill" id="mode">…</span><span class="pill" id="link">connecting</span>
+</div></header>
+<div class="wrap">
+<main>
+<section class="card hero">
+  <svg class="ring" viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="50"/>
+  <circle class="fg" id="ring" cx="60" cy="60" r="50" stroke-dasharray="314.16" stroke-dashoffset="0" transform="rotate(-90 60 60)"/>
+  <text x="60" y="64" font-size="30" id="score">--</text><text x="60" y="84" font-size="11" fill="currentColor" style="fill:var(--mute)">freshness</text></svg>
+  <div><div class="grade" id="grade">—</div><div class="advice" id="advice">Waiting for the monitor…</div>
+  <div class="phase" id="phase"></div><ul class="alerts" id="alerts"></ul></div>
+</section>
+
+<section class="tiles">
+  <div class="card tile"><h2>Ice temperature <span class="tag" id="tTag">OK</span></h2>
+    <div><span class="v" id="tV">--</span><span class="u">°C</span></div>
+    <div class="bar"><i id="tBar"></i><u id="tMk1"></u><u id="tMk2"></u></div>
+    <div class="s" id="tS">Ice should keep the hold at 0 °C</div></div>
+  <div class="card tile"><h2>Meltwater height <span class="tag" id="wTag">OK</span></h2>
+    <div><span class="v" id="wV">--</span><span class="u">cm</span></div>
+    <svg class="hold" viewBox="0 0 240 96" preserveAspectRatio="none">
+      <rect x="2" y="2" width="236" height="92" rx="8" fill="none" stroke="var(--line)" stroke-width="3"/>
+      <rect id="wFill" x="5" y="91" width="230" height="0" fill="var(--water)" opacity=".75"/>
+      <g fill="var(--sea)" opacity=".55" id="fish"><ellipse cx="60" cy="70" rx="26" ry="8"/><ellipse cx="128" cy="72" rx="28" ry="8"/><ellipse cx="190" cy="69" rx="24" ry="8"/>
+      <ellipse cx="94" cy="56" rx="26" ry="8"/><ellipse cx="160" cy="55" rx="26" ry="8"/></g>
+      <line id="wWarn" x1="5" x2="235" stroke="var(--warn)" stroke-dasharray="4 4"/><line id="wDang" x1="5" x2="235" stroke="var(--bad)" stroke-dasharray="4 4"/>
+    </svg>
+    <div class="s" id="wS">Meltwater must drain away. Only ice should touch the fish.</div></div>
+  <div class="card tile"><h2>Rot &amp; chemical gas <span class="tag" id="gTag">OK</span></h2>
+    <div><span class="v" id="gV">--</span><span class="u">MQ-3</span></div>
+    <div class="bar"><i id="gBar"></i><u id="gMk1"></u><u id="gMk2"></u></div>
+    <span class="chip" id="mq5">MQ-5 spoilage gas: clear</span><span class="chip" id="wet">Water at fish: no</span>
+    <div class="s" id="gS">Alcohol / amine vapour from rotting fish or chemicals</div></div>
+  <div class="card tile"><h2>Hold humidity</h2>
+    <div><span class="v" id="hV">--</span><span class="u">%</span></div>
+    <div class="bar"><i id="hBar" style="background:var(--water)"></i></div>
+    <div class="s">Above 80 % is normal for a hold packed with ice</div></div>
+</section>
+
+<section class="two">
+  <div class="card"><h2>Box display (TM1637) &amp; red LED <span class="led" id="led"></span></h2>
+    <div class="seg"><svg id="segs" viewBox="0 0 300 110"></svg></div>
+    <div class="note">The box display shows a rotating summary (temperature, water, gas, freshness) and flashes the fault code when anything goes abnormal: ICE, drAn, ALCO, rOt.</div></div>
+  <div class="card"><h2>Trend · last 30 minutes</h2><canvas id="chart"></canvas>
+    <div class="legend"><span style="--c:#e8483b">Temp °C</span><span style="--c:#3d9bd6">Water cm</span><span style="--c:#9b59b6">Gas ÷10</span><span style="--c:#16865a">Freshness ÷10</span></div></div>
+</section>
+
+<section class="card"><h2>Alarm limits &amp; fish hold</h2>
+  <div class="grid-set">
+    <label>Ice warning above (°C)<input id="cTw" type="number" step="0.5"></label>
+    <label>Ice danger above (°C)<input id="cTd" type="number" step="0.5"></label>
+    <label>Water warning above (cm)<input id="cWw" type="number" step="0.5"></label>
+    <label>Water danger above (cm)<input id="cWd" type="number" step="0.5"></label>
+    <label>Gas warning (MQ-3 ADC)<input id="cGw" type="number" step="10"></label>
+    <label>Gas danger (MQ-3 ADC)<input id="cGd" type="number" step="10"></label>
+    <label>Sensor to empty floor (cm)<input id="cDepth" type="number" step="1"></label>
+    <label>Box display upside down<select id="cFlip" style="font:inherit;padding:7px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)"><option value="1">Yes (flip 180°)</option><option value="0">No</option></select></label>
+  </div>
+  <div class="tg" style="margin-top:12px"><button class="btn pri" id="save">Save limits</button><button class="btn" id="reset">Factory limits</button>
+  <a class="btn" id="dl" href="/log.csv">Download log (CSV)</a><button class="btn" id="clr">Clear log</button></div>
+  <div class="note">Every minute the monitor writes one row to its flash log (time, temperature, water, gas, freshness, status). Open the page once from your phone and the log gets real clock times.</div>
+</section>
+<footer id="foot">Marine Fish Quality Monitor · NodeMCU ESP8266</footer>
+</main>
+<aside class="card" id="simPanel">
+  <h3>Simulator</h3>
+  <div class="note" style="margin:0 0 10px">No board needed. Move the sliders and the dashboard reacts exactly as the NodeMCU would: alarms, box display, red LED, freshness and log.</div>
+  <div class="seg-tabs" id="modeTabs"><button data-m="manual">Manual sliders</button><button data-m="story">Voyage story</button></div>
+  <div id="manual">
+    <label class="sl">Ice temperature<input type="range" id="sT" min="-2" max="12" step="0.5"><output id="oT"></output></label>
+    <label class="sl">Meltwater height<input type="range" id="sW" min="0" max="12" step="0.5"><output id="oW"></output></label>
+    <label class="sl">MQ-3 gas<input type="range" id="sG" min="0" max="1023" step="1"><output id="oG"></output></label>
+    <label class="sl">Humidity<input type="range" id="sH" min="30" max="100" step="1"><output id="oH"></output></label>
+    <div class="tg"><button id="bRot">MQ-5 spoilage gas</button><button id="bWet">Water at fish (probe wet)</button></div>
+    <div class="tg" style="margin-top:10px"><button class="btn" data-p="fresh">Fresh catch</button><button class="btn" data-p="melt">Ice melting</button><button class="btn" data-p="clog">Drain blocked</button><button class="btn" data-p="rot">Rotten fish</button><button class="btn" data-p="chem">Chemical used</button></div>
+  </div>
+  <div class="note" id="simNote"></div>
+</aside>
+</div>
+<script>window.SIM=1;</script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const AL={ICE:1,DRAIN:2,ALCO:4,ROT:8,SENSOR:16};
+let D=null,lastOk=0,standalone=!!window.SIM||location.protocol==="file:"||/[?&]demo/.test(location.search),everOk=false,editing=0;
+function enterSim(){standalone=true;document.body.classList.add("sim")}
+if(standalone)enterSim();
+
+/* ---------- offline twin of the firmware (used when the page is opened without the board) ---------- */
+const twin={t0:Date.now(),cfg:{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1},sim:1,story:0,
+ man:{t:0.5,h:92,w:0.8,g:190,r:false,wet:false},hist:[],lastH:0,
+ up(){return (Date.now()-this.t0)/1000},
+ ramp(t,a,b,x,y){if(t<=a)return x;if(t>=b)return y;const k=(t-a)/(b-a);return x+(y-x)*k*k*(3-2*k)},
+ n(a){return (Math.random()*2-1)*a},
+ phase(t){return t<40?"Fresh catch on ice":t<80?"Ice melting":t<130?"Drain outlet blocked":t<150?"Outlet cleared":t<200?"Fish starting to rot":"Fresh ice and new catch"},
+ read(){const c=this.cfg;let r;
+  if(!this.story){const m=this.man;r={temp:m.t,hum:m.h,water:m.w,mq3:m.g,mq5:m.r,wet:m.wet}}
+  else{const t=this.up()%240,R=this.ramp.bind(this);let T=R(t,40,80,.4,3);if(t>=80)T=R(t,80,130,3,2);if(t>=150)T=R(t,150,195,2,5.5);if(t>=200)T=R(t,200,225,5.5,.4);
+   let W=R(t,40,80,.8,1.8);if(t>=80)W=R(t,80,125,1.8,7);if(t>=130)W=R(t,130,145,7,1);if(t>=200)W=R(t,200,215,1,.8);
+   let G=190;if(t>=150)G=R(t,150,195,190,640);if(t>=200)G=R(t,200,220,640,190);
+   W=Math.max(0,W+this.n(.15));r={temp:T+this.n(.15),hum:91+this.n(2),water:W,mq3:Math.round(G+this.n(8)),mq5:t>=178&&t<205,wet:W>3}}
+  const lv=(v,w,d)=>v>d?"danger":v>w?"warn":"ok",o={ok:0,warn:1,danger:2};
+  let tL=lv(r.temp,c.tw,c.td),wL=lv(r.water,c.ww,c.wd);if(r.wet&&wL==="ok")wL="warn";
+  let gL=lv(r.mq3,c.gw,c.gd);let a=0;if(tL!=="ok")a|=1;if(wL!=="ok")a|=2;if(gL!=="ok")a|=4;if(r.mq5){a|=8;gL="danger"}
+  const L=["ok","warn","danger"][Math.max(o[tL],o[wL],o[gL])];
+  let s=100;if(r.temp>0)s-=r.temp*6;if(r.water>c.ww)s-=(r.water-c.ww)*10;if(r.wet)s-=8;if(r.mq3>220)s-=(r.mq3-220)/7;if(r.mq5)s-=25;
+  s=Math.max(0,Math.min(100,Math.round(s)));
+  const now=Date.now();if(now-this.lastH>=10000||!this.hist.length){this.lastH=now;this.hist.push([Math.round(r.temp*10),Math.round(r.water*10),r.mq3,s,(r.wet?1:0)|(r.mq5?2:0)|(o[L]<<2)|16]);if(this.hist.length>180)this.hist.shift()}
+  return Object.assign(r,{dist:c.depth-r.water,score:s,grade:s>=80?"FRESH":s>=60?"GOOD":s>=40?"CHECK":"SPOILED",level:L,tempLv:tL,waterLv:wL,gasLv:gL,alerts:a,warmup:0,
+   sim:this.sim,story:this.story,phase:this.story?this.phase(this.up()%240):"",uptime:Math.round(this.up()),epoch:Math.round(now/1000),clients:1,cfg:Object.assign({},c)})},
+ api(path){const u=new URL(path,"http://x/"),q=u.searchParams,c=this.cfg;
+  if(u.pathname==="/api/history")return{period:10,p:this.hist};
+  if(u.pathname==="/api/settings"){if(q.has("mode")){this.sim=q.get("mode")==="sim"?1:0}if(q.has("story"))this.story=q.get("story")==="1"?1:0;
+   if(q.has("reset"))Object.assign(c,{depth:40,tw:1,td:4,ww:2,wd:5,gw:350,gd:550,flip:1});
+   for(const k of["depth","tw","td","ww","wd","gw","gd","flip"])if(q.has(k))c[k]=+q.get(k)}
+  if(u.pathname==="/api/sim"){const m=this.man;for(const[k,f]of[["t","t"],["h","h"],["w","w"],["g","g"]])if(q.has(k))m[f]=+q.get(k);
+   if(q.has("r"))m.r=q.get("r")==="1";if(q.has("wet"))m.wet=q.get("wet")==="1";this.sim=1;this.story=0}
+  if(!this.sim){return Object.assign(this.read(),{temp:null,hum:null,water:null,dist:null,mq3:null,mq5:false,wet:false,score:100,grade:"FRESH",level:"warn",tempLv:"ok",waterLv:"ok",gasLv:"ok",alerts:16,sim:0,phase:""})}
+  return this.read()}};
+
+async function api(path){
+  if(standalone)return twin.api(path);
+  const r=await fetch(path,{cache:"no-store"});if(!r.ok)throw new Error(r.status);return r.json();
+}
+
+/* ---------- seven-segment mirror (same glyphs and logic as the firmware) ---------- */
+const G={"0":0x3F,"1":6,"2":0x5B,"3":0x4F,"4":0x66,"5":0x6D,"6":0x7D,"7":7,"8":0x7F,"9":0x6F,A:0x77,b:0x7C,C:0x39,c:0x58,d:0x5E,E:0x79,F:0x71,G:0x3D,H:0x76,h:0x74,I:0x30,L:0x38,n:0x54,O:0x3F,o:0x5C,P:0x73,r:0x50,S:0x6D,t:0x78,U:0x3E,u:0x1C,y:0x6E,"-":0x40,"*":0x63};
+(function buildSegs(){const s=$("segs");let h="";const P=[[8,2,36,2,32,8,12,8],[38,4,40,6,38,42,34,46,32,40,34,10],[38,52,40,56,38,92,34,96,32,90,34,58],[12,92,32,92,36,98,8,98],[6,56,8,52,12,58,10,90,4,96,2,92],[6,10,8,4,12,10,10,42,4,46,2,42],[10,47,34,47,38,50,34,53,10,53,6,50]];
+ for(let d=0;d<4;d++){const x=12+d*70+(d>1?14:0);for(let k=0;k<7;k++){const pts=[];for(let i=0;i<P[k].length;i+=2)pts.push((P[k][i]+x)+","+(P[k][i+1]+5));h+=`<polygon id="g${d}${k}" points="${pts.join(" ")}"/>`}}
+ h+=`<circle id="col1" cx="150" cy="38" r="4"/><circle id="col2" cx="150" cy="72" r="4"/>`;s.innerHTML=h})();
+function segShow(txt){for(let d=0;d<4;d++){const g=G[txt[d]]||0;for(let k=0;k<7;k++)$("g"+d+k).style.fill=(g>>k)&1?"var(--seg)":"var(--segoff)"}
+ $("col1").style.fill=$("col2").style.fill="var(--segoff)"}
+const pad=(v,n)=>String(v).padStart(n," ");
+function segFrame(){
+  if(!D){segShow("----");return}
+  const ms=Date.now(),f=D,tmp=f.temp==null?"E-dH":pad(Math.max(-9,Math.min(99,Math.round(f.temp))),2)+"*C",
+   wat=f.water==null?"E-US":"H"+pad(Math.min(999,Math.round(f.water)),3),gas=f.mq3==null?"E-AL":"AL"+pad(Math.min(99,Math.floor(f.mq3*100/1024)),2),
+   sc=f.score>=100?"F100":"Fr"+pad(f.score,2);
+  if(f.warmup>0&&!(f.alerts&~AL.SENSOR)){segShow(Math.floor(ms/1500)%2?"PrE ":pad(f.warmup,4));return}
+  if(!f.alerts){segShow([tmp,wat,gas,sc][Math.floor(ms/2500)%4]);return}
+  const list=[0,1,2,3,4].filter(i=>f.alerts&(1<<i)),slot=Math.floor(ms/1200),w=list[Math.floor(slot/2)%list.length],val=slot%2;
+  if(ms%500>=330){segShow("    ");return}
+  segShow([val?tmp:"ICE ",val?wat:"drAn",val?gas:"ALCO",val?"GAS ":"rOt ",f.temp==null?tmp:f.water==null?wat:gas][w]);
+}
+setInterval(segFrame,100);
+setInterval(()=>{if(!D)return;const ms=Date.now(),l=D.level;$("led").classList.toggle("on",l==="danger"?ms%200<100:l==="warn"?ms%1000<500:D.warmup>0?ms%2000<60:false)},50);
+
+/* ---------- rendering ---------- */
+const tagTxt={ok:"OK",warn:"WARNING",danger:"DANGER"};
+function tag(el,lv,na){el.className="tag "+(na?"na":lv==="ok"?"":lv);el.textContent=na?"NO SENSOR":tagTxt[lv]}
+function pct(v,lo,hi){return Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100))}
+function fmt(v,d){return v==null?"--":(+v).toFixed(d)}
+function render(){
+  const f=D,c=f.cfg,col={ok:"var(--ok)",warn:"var(--warn)",danger:"var(--bad)"};
+  $("score").textContent=f.score;$("ring").style.strokeDashoffset=314.16*(1-f.score/100);
+  $("ring").style.stroke=f.score>=60?"var(--ok)":f.score>=40?"var(--warn)":"var(--bad)";
+  $("grade").textContent=f.grade;$("grade").style.color=col[f.level];
+  const A=[];
+  if(f.alerts&AL.ROT)A.push(["danger","Spoilage gas","MQ-5 tripped. Fish may be rotting. Inspect the catch and remove spoiled fish."]);
+  if(f.alerts&AL.ALCO)A.push([f.gasLv==="danger"?"danger":"warn","Alcohol / chemical vapour",f.gasLv==="danger"?"Strong vapour: rotten fish or a chemical preservative used on the catch.":"Vapour rising. Early spoilage. Check the catch soon."]);
+  if(f.alerts&AL.DRAIN)A.push([f.waterLv,"Meltwater",f.waterLv==="danger"?"Water "+fmt(f.water,1)+" cm. The drain outlet is blocked. Open it now, the fish are soaking.":(f.wet?"Water has reached the fish. Check the drain outlet.":"Water building up ("+fmt(f.water,1)+" cm). The drain is slowing.")]);
+  if(f.alerts&AL.ICE)A.push([f.tempLv,"Ice",f.tempLv==="danger"?"Hold at "+fmt(f.temp,1)+" °C. No ice left. Add crushed ice immediately.":"Above 0 °C. The ice is melting. Top up the ice."]);
+  if(f.alerts&AL.SENSOR)A.push(["warn","Sensor check",["temp","water","mq3"].filter(k=>f[k]==null).map(k=>({temp:"DHT11",water:"ultrasonic",mq3:"MQ-3"})[k]).join(", ")+" not answering. Check the wiring (see CONNECTIONS.md)."]);
+  $("alerts").innerHTML=A.length?A.map(a=>`<li class="a-${a[0]}"><b>${a[1]}</b><span>${a[2]}</span></li>`).join(""):`<li class="a-ok"><b>All good</b><span>Ice is holding, the drain is clear and no spoilage gas.</span></li>`;
+  $("advice").textContent=f.warmup>0?"Gas sensors warming up: "+f.warmup+" s":f.level==="ok"?"Catch is in good condition":f.level==="warn"?"Something needs attention":"Act now to save the catch";
+  $("phase").textContent=f.sim?(f.story?"Simulator · voyage story: "+f.phase:"Simulator · manual values"):"";
+  if(!f.sim&&!standalone)$("phase").textContent="";
+  // temperature
+  tag($("tTag"),f.tempLv,f.temp==null);$("tV").textContent=fmt(f.temp,1);
+  $("tBar").style.width=f.temp==null?0:pct(f.temp,-2,12)+"%";$("tBar").style.background=col[f.tempLv];
+  $("tMk1").style.left=pct(c.tw,-2,12)+"%";$("tMk2").style.left=pct(c.td,-2,12)+"%";
+  // water
+  tag($("wTag"),f.waterLv,f.water==null);$("wV").textContent=fmt(f.water,1);
+  const sc=86/12,wh=f.water==null?0:Math.min(86,f.water*sc);$("wFill").setAttribute("y",91-wh);$("wFill").setAttribute("height",wh);
+  for(const[id,v]of[["wWarn",c.ww],["wDang",c.wd]]){const y=91-Math.min(86,v*sc);$(id).setAttribute("y1",y);$(id).setAttribute("y2",y)}
+  $("wS").textContent=f.water==null?"Ultrasonic sensor not answering":"Surface "+fmt(f.dist,1)+" cm below the sensor · limits "+c.ww+" / "+c.wd+" cm";
+  // gas
+  tag($("gTag"),f.gasLv,f.mq3==null);$("gV").textContent=f.mq3==null?"--":f.mq3;
+  $("gBar").style.width=f.mq3==null?0:pct(f.mq3,0,1023)+"%";$("gBar").style.background=col[f.gasLv];
+  $("gMk1").style.left=pct(c.gw,0,1023)+"%";$("gMk2").style.left=pct(c.gd,0,1023)+"%";
+  $("mq5").className="chip"+(f.mq5?" on":"");$("mq5").textContent="MQ-5 spoilage gas: "+(f.mq5?"DETECTED":"clear");
+  $("wet").className="chip"+(f.wet?" on":"");$("wet").textContent="Water at fish: "+(f.wet?"YES":"no");
+  $("hV").textContent=fmt(f.hum,0);$("hBar").style.width=f.hum==null?0:f.hum+"%";
+  // mode
+  $("mode").textContent=standalone?"SIMULATOR":f.sim?"DEMO DATA":"LIVE SENSORS";
+  const m=f.story?"story":"manual";
+  document.querySelectorAll("#modeTabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+  $("manual").style.display=m==="manual"?"":"none";
+  $("simNote").textContent=m==="story"?"A 4-minute voyage plays through every alarm: ice melting, blocked drain, rotting fish, then fresh ice. Live: "+f.phase:"Drag a slider or tap a scene. The values go through the same alarm and freshness rules as the firmware.";
+  if(m==="manual"&&!editing){$("sT").value=f.temp;$("sW").value=f.water;$("sG").value=f.mq3;$("sH").value=f.hum;$("bRot").classList.toggle("on",f.mq5);$("bWet").classList.toggle("on",f.wet);showOut()}
+  if(document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="SELECT"){
+    $("cTw").value=c.tw;$("cTd").value=c.td;$("cWw").value=c.ww;$("cWd").value=c.wd;$("cGw").value=c.gw;$("cGd").value=c.gd;$("cDepth").value=c.depth;$("cFlip").value=c.flip}
+  const up=f.uptime,hh=Math.floor(up/3600),mm=Math.floor(up/60)%60;
+  $("foot").textContent=(standalone?"Offline simulator (no board connected)":"Monitor running "+hh+" h "+mm+" min · "+f.clients+" device(s) on the hotspot")+" · Marine Fish Quality Monitor";
+}
+function showOut(){$("oT").textContent=(+$("sT").value).toFixed(1)+" °C";$("oW").textContent=(+$("sW").value).toFixed(1)+" cm";$("oG").textContent=$("sG").value;$("oH").textContent=$("sH").value+" %"}
+
+/* ---------- chart ---------- */
+async function chart(){
+  let h;try{h=await api("/api/history")}catch(e){return}
+  const cv=$("chart"),dpr=devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;
+  const x=cv.getContext("2d");x.scale(dpr,dpr);x.clearRect(0,0,W,H);
+  const css=getComputedStyle(document.documentElement),line=css.getPropertyValue("--line"),mute=css.getPropertyValue("--mute");
+  const L=28,R=6,T=6,B=18,pw=W-L-R,ph=H-T-B,max=12;
+  x.font="10px system-ui";x.fillStyle=mute;x.strokeStyle=line;x.lineWidth=1;
+  for(let v=0;v<=max;v+=3){const y=Math.round(T+ph-(v/max)*ph)+.5;x.globalAlpha=.6;x.beginPath();x.moveTo(L,y);x.lineTo(W-R,y);x.stroke();x.globalAlpha=1;x.fillText(v,6,y+3)}
+  const p=h.p,n=p.length;x.fillText(n?"-"+Math.round(n*h.period/60)+" min":"collecting…",L,H-4);x.fillText("now",W-R-20,H-4);
+  if(n<2)return;
+  const ser=[[0,"#e8483b",.1],[1,"#3d9bd6",.1],[2,"#9b59b6",.01],[3,"#16865a",.1]];
+  for(const[i,c,k]of ser){x.strokeStyle=c;x.lineWidth=2;x.beginPath();let pen=false;
+    p.forEach((r,j)=>{if(r[i]==null){pen=false;return}const X=L+j/(n-1)*pw,Y=T+ph-Math.max(0,Math.min(max,r[i]*k))/max*ph;pen?x.lineTo(X,Y):x.moveTo(X,Y);pen=true});x.stroke()}
+}
+
+/* ---------- controls ---------- */
+async function send(path){try{D=await api(path);render()}catch(e){}}
+const PRESET={fresh:[0.5,0.8,190,92,0,0],melt:[3,1.8,200,90,0,0],clog:[2,7,210,95,0,1],rot:[6,1.5,640,88,1,0],chem:[0.5,0.8,600,92,0,0]};
+document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{const p=PRESET[b.dataset.p];editing=0;send(`/api/sim?t=${p[0]}&w=${p[1]}&g=${p[2]}&h=${p[3]}&r=${p[4]}&wet=${p[5]}`)});
+document.querySelectorAll("#modeTabs button").forEach(b=>b.onclick=()=>{const m=b.dataset.m;
+  if(m==="story")send("/api/settings?mode=sim&story=1");
+  else send("/api/sim?t="+(D&&D.temp!=null?D.temp:0.5)+"&w="+(D&&D.water!=null?D.water:1)+"&g="+(D&&D.mq3!=null?D.mq3:190)+"&h="+(D&&D.hum!=null?D.hum:90))});
+let simTimer;
+function pushSim(){editing=Date.now();showOut();clearTimeout(simTimer);simTimer=setTimeout(()=>send("/api/sim?t="+$("sT").value+"&w="+$("sW").value+"&g="+$("sG").value+"&h="+$("sH").value),120)}
+["sT","sW","sG","sH"].forEach(id=>$(id).addEventListener("input",pushSim));
+$("bRot").onclick=()=>{editing=Date.now();send("/api/sim?r="+(D&&D.mq5?0:1))};
+$("bWet").onclick=()=>{editing=Date.now();send("/api/sim?wet="+(D&&D.wet?0:1))};
+$("save").onclick=()=>send(`/api/settings?tw=${$("cTw").value}&td=${$("cTd").value}&ww=${$("cWw").value}&wd=${$("cWd").value}&gw=${$("cGw").value}&gd=${$("cGd").value}&depth=${$("cDepth").value}&flip=${$("cFlip").value}`).then(()=>{$("save").textContent="Saved ✓";setTimeout(()=>$("save").textContent="Save limits",1500)});
+$("reset").onclick=()=>{if(confirm("Restore factory alarm limits?"))send("/api/settings?reset=1")};
+$("clr").onclick=async()=>{if(!confirm("Delete the flash log?"))return;if(!standalone)await fetch("/api/log/clear");alert("Log cleared")};
+if(standalone)$("dl").onclick=e=>{e.preventDefault();const rows=["temp_c,water_cm,mq3_adc,freshness"].concat(twin.hist.map(r=>[r[0]/10,r[1]/10,r[2],r[3]].join(",")));
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));a.download="fish_hold_sim_log.csv";a.click()};
+
+/* ---------- polling ---------- */
+async function poll(){
+  if(editing&&Date.now()-editing>1500)editing=0;
+  try{D=await api("/api/data");lastOk=Date.now();everOk=true;render();$("link").textContent=standalone?"offline demo":"live";$("link").className="pill"}
+  catch(e){if(!everOk&&!standalone&&Date.now()-start>4000){enterSim();return}
+    if(Date.now()-lastOk>4000){$("link").textContent="CONNECTION LOST";$("link").className="pill off";$("grade").textContent="NO LINK";$("grade").style.color="var(--mute)";$("advice").textContent="Rejoin the Boat-Fish-Monitor WiFi"}}
+}
+const start=Date.now();
+if(!standalone)fetch("/api/time?t="+Math.floor(Date.now()/1000)).catch(()=>{});
+poll();setInterval(poll,1000);chart();setInterval(chart,10000);addEventListener("resize",chart);
+</script>
+</body>
+</html>

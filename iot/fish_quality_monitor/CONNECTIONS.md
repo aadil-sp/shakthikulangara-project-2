@@ -121,6 +121,6 @@ You can change all limits from the dashboard. The DHT11 can't read below 0 °C, 
 ## 6. Check it
 
 1. Flash: `tools/flash.sh iot`
-2. The display shows `FISH`, then `SIn` (simulator on) and starts cycling.
+2. The display shows `FISH`, then `PrE` and a 60-second countdown while the MQ heaters warm up.
 3. Join the WiFi **Boat-Fish-Monitor** (no password) → **http://192.168.4.1**
-4. When the sensors are wired, tap **Live sensors** on the dashboard. Any sensor that isn't answering shows **NO SENSOR**, and the box display shows `E-dH` (DHT), `E-US` (ultrasonic) or `E-AL` (MQ-3).
+4. Any sensor that isn't wired or answering shows **NO SENSOR** on the dashboard, and the box display flashes `E-dH` (DHT), `E-US` (ultrasonic) or `E-AL` (MQ-3). Fix the wire and it clears by itself.

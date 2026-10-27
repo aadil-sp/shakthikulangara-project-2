@@ -738,10 +738,12 @@ def iot_spec(story):
                       "phone so log rows get real dates. A missing sensor is shown as NO SENSOR, never as a made-up value."),
                 ("img", ASSETS / "iot_flow.png", 90, "Figure 2: Program flow")]},
             {"h": "Simulator", "items": [("p",
-                "Because the sensors are not always connected, the firmware has a simulator that feeds the same alarm, display, LED and "
-                "logging code. In 'voyage story' mode it plays a 4-minute voyage: fresh catch, ice melting, drain outlet blocked, outlet "
-                "cleared, fish rotting and fresh ice again. In 'manual' mode the owner moves sliders on the dashboard. The dashboard page "
-                "also runs as an offline simulator on any laptop without the board.")]},
+                "A separate simulator page runs on any laptop without the board. The full dashboard sits on one side and sliders on the "
+                "other: ice temperature, meltwater height, MQ-3 gas, humidity, the MQ-5 trip and the wet probe, plus one-tap scenes "
+                "(fresh catch, ice melting, drain blocked, rotten fish, chemical used). A 'voyage story' mode plays a 4-minute trip "
+                "through every alarm. The simulator uses exactly the same rules and limits as the firmware. The real board's page has no "
+                "simulator controls and shows only live sensor readings; for exhibitions the board can still play the voyage story on its "
+                "own display.")]},
             {"h": "Testing and results", "items": [
                 ("p", "The graph below is a replay of the firmware's own simulator and alarm formulas over one voyage story. Every alarm "
                       f"fires in the right phase and clears afterwards; the freshness score falls to {lowest['score']} at the worst point "

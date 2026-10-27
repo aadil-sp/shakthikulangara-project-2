@@ -48,7 +48,7 @@ struct Settings {
   float holdDepth, tempWarn, tempDanger, waterWarn, waterDanger;
   int16_t mq3Warn, mq3Danger;
 };
-const uint32_t SETTINGS_MAGIC = 0xF15A0003;
+const uint32_t SETTINGS_MAGIC = 0xF15A0004;
 Settings cfg;
 
 struct Reading {
