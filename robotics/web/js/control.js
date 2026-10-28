@@ -153,7 +153,7 @@ export function applyObstacles(v, w, sonar, cfg, goalCm) {
 // says the car is pushing without moving, and a stall stop when escaping keeps
 // failing (battery off, wheels lifted, marker held in a hand).
 export class SafetyLayer {
-  static DETOUR_S = 0.9; static STUCK_S = 0.8; static ESCAPE_S = 0.6; static MAX_ESCAPES = 2; static PROGRESS_CM = 4;
+  static DETOUR_S = 0.9; static STUCK_S = 1.2; static ESCAPE_S = 0.6; static PROGRESS_CM = 4;
   constructor(cfg) { this.cfg = cfg; this.reset(); }
   reset() {
     this.mode = "normal"; this.timer = 0; this.side = 1; this.stuckT = 0; this.ref = null;
@@ -169,7 +169,8 @@ export class SafetyLayer {
       else if (this.stuckT > S.STUCK_S) {
         if (this.escapeFrom && dist(poseCm[0], poseCm[1], this.escapeFrom[0], this.escapeFrom[1]) < S.PROGRESS_CM) this.escapes++;
         else { this.escapes = 1; this.escapeFrom = poseCm; }
-        if (this.escapes > S.MAX_ESCAPES) { this.stalled = true; return [0, 0, "car not moving - stopped"]; }
+        // maxEscapes 0 (default): never back out by itself, just stop and tell the user
+        if (this.escapes > (this.cfg.maxEscapes ?? 0)) { this.stalled = true; return [0, 0, "car not moving - stopped"]; }
         const [l, r] = sonar ? [sonar[0], sonar[2]] : [0, 1];
         this.mode = "escape"; this.timer = 0; this.side = r >= l ? 1 : -1; this.ref = null;
       }

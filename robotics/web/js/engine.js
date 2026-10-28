@@ -10,6 +10,8 @@ const GOAL_CONFIRM_FRAMES = 4;   // goal marker seen this many frames in a row b
 const GOAL_HIDE_CM = 25;         // car within this distance may be hiding the goal under its body
 const GOAL_MEMORY_S = 8;         // ...then the goal is remembered this long
 const GOAL_LOST_S = 0.7;         // otherwise a goal that disappears is forgotten quickly
+const SIZE_RATIO_MAX = 1.8;      // a marker this much bigger/smaller than the car's is not one of ours
+const CAR_JUMP_CM = 40;          // a car marker this far from the tracked car in one frame is a false detection
 
 export class Engine {
   constructor(cfg, policyQ) {
@@ -32,6 +34,7 @@ export class Engine {
     this.goalMem = null;          // [x, y, time last seen]
     this.goalStreak = 0;
     this.stallReported = false;
+    this.carSide = 0;             // running average size of the car marker, px
   }
 
   emit(msg) { this.events.push(msg); }
@@ -52,9 +55,13 @@ export class Engine {
   }
 
   goalMarkers(markers) {
-    const { carMarkerId, goalMarkerId } = this.cfg.vision;
-    if (goalMarkerId >= 0) return markers[goalMarkerId] ? [markers[goalMarkerId]] : [];
-    return Object.values(markers).filter(m => m.id !== carMarkerId).sort((a, b) => a.id - b.id);
+    const { carMarkerId, goalMarkerIds } = this.cfg.vision;
+    const s = this.carSide;
+    // Only the goal IDs you printed, and only if about the same size as the car marker
+    return Object.values(markers)
+      .filter(m => m.id !== carMarkerId && goalMarkerIds.includes(m.id))
+      .filter(m => !s || (m.side < s * SIZE_RATIO_MAX && m.side > s / SIZE_RATIO_MAX))
+      .sort((a, b) => a.id - b.id);
   }
 
   process(markers, t, sonar) {
@@ -63,8 +70,15 @@ export class Engine {
     const v = this.cfg.vision, c = this.cfg.control;
     const out = { pwm: [0, 0], v: 0, w: 0, pose: null, target: null, distCm: 0, headingErr: 0, status: "", action: "", markers };
 
-    const car = markers[v.carMarkerId];
+    let car = markers[v.carMarkerId];
+    // Reject false car detections: wrong size, or a sudden jump across the floor
+    if (car && this.carSide && (car.side > this.carSide * SIZE_RATIO_MAX || car.side < this.carSide / SIZE_RATIO_MAX)) car = null;
+    if (car && this.localizer.initialised && this.localizer.pxPerCm) {
+      const p = this.localizer.pose(t);
+      if (p && Math.hypot(car.x - p.x, car.y - p.y) > CAR_JUMP_CM * this.localizer.pxPerCm) car = null;
+    }
     if (car) {
+      this.carSide = this.carSide ? 0.9 * this.carSide + 0.1 * car.side : car.side;
       const theta = wrapAngle(car.theta + (v.headingOffsetDeg * Math.PI) / 180);
       this.localizer.update(t, car.x, car.y, theta, car.side, v.markerSizeCm);
     }

@@ -10,24 +10,28 @@ const video = $("video");
 
 // ---------------------------------------------------------------- settings (saved in this browser)
 const DEFAULTS = {
-  vision: { carMarkerId: 0, goalMarkerId: -1, markerSizeCm: 5, headingOffsetDeg: 0, mirror: false },
+  vision: { carMarkerId: 0, goalMarkerIds: [1, 2, 3], markerSizeCm: 5, headingOffsetDeg: 0, mirror: false },
   control: {
     mode: "classic", speed: 0.7, maxPwm: 255, minPwm: 70, arriveCm: 4, brakeCm: 30, pivotDeg: 55, kpTurn: 1.4,
-    kdTurn: 0.12, slewPerS: 3, invertThrottle: false, invertSteering: false, autoPolarity: true,
-    followGoalMarker: true, rlLearnOnline: false,
+    kdTurn: 0.12, slewPerS: 3, invertThrottle: false, invertSteering: false,
+    // Off by default: on a real car these made it move without being asked
+    autoPolarity: false, followGoalMarker: false, rlLearnOnline: false,
   },
-  obstacle: { enabled: true, warnCm: 35, stopCm: 15 },
+  obstacle: { enabled: true, warnCm: 35, stopCm: 15, maxEscapes: 0 },
   link: { sendHz: 20, timeoutS: 1, guardCm: 12 },
   lastCamera: "sim",
 };
-const STORE = "aruconav-settings-v1";
+// v2: earlier saves could hold motor-direction flips made by the auto-detector
+const STORE = "aruconav-settings-v2";
 function loadSettings() {
   const cfg = structuredClone(DEFAULTS);
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
     for (const k of Object.keys(cfg)) {
       if (typeof cfg[k] === "object" && saved[k] && typeof saved[k] === "object") {
-        for (const f of Object.keys(cfg[k])) if (typeof saved[k][f] === typeof cfg[k][f]) cfg[k][f] = saved[k][f];
+        for (const f of Object.keys(cfg[k])) {
+          if (Array.isArray(cfg[k][f]) ? Array.isArray(saved[k][f]) : typeof saved[k][f] === typeof cfg[k][f]) cfg[k][f] = saved[k][f];
+        }
       } else if (typeof saved[k] === typeof cfg[k]) cfg[k] = saved[k];
     }
   } catch (_) {}
@@ -468,4 +472,13 @@ function setup() {
 }
 
 window.addEventListener("beforeunload", () => { if (link.open) link.send(0, 0); });
+window.aruconav = { engine, sim, link, cfg };   // for debugging from the browser console
+// A hidden tab stops running the control loop: stop the car right away
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    keys.clear();
+    if (link.open) link.send(0, 0);
+    if (source !== "sim" && (engine.waypoints.length || engine.goalMem)) { engine.clearPath(); log("Page hidden - car stopped and path cleared"); }
+  }
+});
 setup();

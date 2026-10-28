@@ -4,7 +4,9 @@
 import { DICT_4X4_50 } from "./dict.js";
 
 const AR = window.AR;
-AR.DICTIONARIES.ARUCO_4X4_50 = { nBits: 16, tau: 2, codeList: DICT_4X4_50 };
+// tau 1 = exact code match only. With 1-bit tolerance about 5% of random dark
+// squares in a room (tiles, window panes) decoded as some marker: ghost goals.
+AR.DICTIONARIES.ARUCO_4X4_50 = { nBits: 16, tau: 1, codeList: DICT_4X4_50 };
 
 export class MarkerTracker {
   constructor() { this.detector = new AR.Detector({ dictionaryName: "ARUCO_4X4_50" }); }
