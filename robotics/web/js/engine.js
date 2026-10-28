@@ -100,7 +100,14 @@ export class Engine {
     const pose = this.localizer.pose(t, LATENCY_S);
     out.pose = pose;
     const ppc = this.localizer.pxPerCm || 6;
-    if (pose) { this.trail.push([pose.x, pose.y]); if (this.trail.length > 400) this.trail.shift(); }
+    if (pose) {
+      // Break the trail (null) where the car was lost or jumped, instead of
+      // drawing a straight line across the floor
+      const last = this.trail[this.trail.length - 1];
+      if (last && Math.hypot(pose.x - last[0], pose.y - last[1]) > 15 * ppc) this.trail.push(null);
+      this.trail.push([pose.x, pose.y]);
+      if (this.trail.length > 400) this.trail.shift();
+    } else if (this.trail.length && this.trail[this.trail.length - 1] !== null) this.trail.push(null);
 
     // Target: clicked waypoints first, otherwise a confirmed goal marker
     let target = this.waypoints.length ? this.waypoints[0] : null;

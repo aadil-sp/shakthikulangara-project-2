@@ -80,8 +80,12 @@ export class CarLocalizer {
     const dx = mul(K, iv).map(r => r[0]);
     this.x = this.x.map((v, i) => v + dx[i]);
     this.x[2] = wrapAngle(this.x[2]);
-    const KH = K.map(r => [r[0], r[1], r[2], 0, 0]);
-    this.P = mul(sub(eye(5), KH), this.P);
+    // Joseph form (I-KH) P (I-KH)^T + K R K^T, then symmetrise: the short form
+    // (I-KH) P lost precision at low frame rates until variances went negative
+    // and the estimate ran away (car "lost", wild lines on the screen).
+    const IKH = sub(eye(5), K.map(r => [r[0], r[1], r[2], 0, 0]));
+    const P = add(mul(mul(IKH, this.P), T(IKH)), mul(mul(K, this.R), T(K)));
+    this.P = P.map((r, i) => r.map((v, j) => 0.5 * (v + P[j][i])));
     this.tMeas = t;
   }
   pose(t, lookahead = 0) {

@@ -102,7 +102,11 @@ class CarLocalizer:
         K = np.linalg.solve(S, H @ self.P).T      # = P H^T S^-1 (S and P are symmetric)
         self.x = self.x + K @ innov
         self.x[2] = wrap_angle(self.x[2])
-        self.P = (np.eye(5) - K @ H) @ self.P
+        # Joseph form + symmetrise: the short form (I-KH)P lost precision at low
+        # frame rates until variances went negative and the estimate ran away
+        IKH = np.eye(5) - K @ H
+        P = IKH @ self.P @ IKH.T + K @ self.R @ K.T
+        self.P = 0.5 * (P + P.T)
         self.t_meas = t
 
     def pose(self, t: float, lookahead_s: float = 0.0) -> Optional[Pose]:

@@ -252,7 +252,14 @@ function drawOverlays(o, sonar) {
   // trail
   if (engine.trail.length > 1) {
     ctx.strokeStyle = "rgba(34, 211, 238, 0.55)";
-    ctx.beginPath(); engine.trail.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+    ctx.beginPath();
+    let pen = false;
+    for (const p of engine.trail) {
+      if (!p) { pen = false; continue; }
+      pen ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]);
+      pen = true;
+    }
+    ctx.stroke();
   }
   // waypoints and target
   ctx.fillStyle = "#facc15"; ctx.strokeStyle = "#facc15";
