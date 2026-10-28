@@ -12,6 +12,16 @@ camera ──► ArUco detection ──► Kalman filter ──► target (click
         auto motor-direction fix ──► smoothing ──► PWM ──► USB ──► ESP-NOW ──► car
 ```
 
+## Use it in the browser: [aruconav.vercel.app](https://aruconav.vercel.app)
+
+No install. Open it in **Chrome or Edge** on any laptop (Windows, Mac, Linux, Chromebook):
+
+1. Pick your overhead camera in **Camera** (the browser asks for permission once).
+2. Plug the ESP32-C3 gateway into the laptop and click **Connect gateway (USB)**.
+3. Put marker **ID 0** on the car ([printable markers](https://aruconav.vercel.app/markers)) and click on the picture to drive.
+
+The web app lives in [`web/`](web/) (plain HTML + JavaScript, no build step) and redeploys on every push to `main`. It uses the same markers, controller, safety layer and gateway protocol as the desktop app below. Firefox and Safari can run the simulator and camera, but only Chrome and Edge can talk to the USB gateway.
+
 ## Features
 
 - **Every camera, on every OS:** USB webcams are found on Windows (DirectShow), Linux (V4L2, with device names) and macOS (AVFoundation), listed by name and resolution. Phone or network cameras work through a stream URL.
