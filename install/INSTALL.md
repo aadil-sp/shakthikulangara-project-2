@@ -2,7 +2,21 @@
 
 MarkerPilot is the robot-navigation app from the robotics project. Install it with one command in a terminal. You don't need Python.
 
-## Linux and macOS
+## Linux laptop (Ubuntu, Debian, Mint): double-click installer
+
+1. Copy **`markerpilot_2.0.0_all.deb`** to the laptop. Build it with `python3 tools/build_linux_deb.py`; it lands in `dist/`.
+2. **Double-click it.** The software installer opens. Click **Install** and enter your password.
+   - If double-click opens an archive viewer instead, right-click the file → **Open With → Software Install**, or run `sudo apt install ./markerpilot_2.0.0_all.deb`.
+3. Keep the laptop **online** while it installs. It downloads OpenCV, PyQt6, numpy and pyserial once (about 120 MB, a few minutes).
+4. Open **MarkerPilot** from the app menu. To start without the robot, right-click the icon and choose **Simulator**. Add it to the dock with right-click → **Add to Favourites**.
+
+The package also lets every user open the ESP32-C3 gateway and USB cables, so there's no `dialout` group to join and no need to log out.
+
+If the laptop was offline during install, MarkerPilot sets itself up the first time you open it. A notification says so, and that first start needs internet.
+
+Uninstall from the software centre, or with `sudo apt remove markerpilot`.
+
+## Linux and macOS (terminal)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aadil-sp/shakthikulangara-project-2/main/install/install.sh | bash
