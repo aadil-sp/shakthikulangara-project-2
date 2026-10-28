@@ -24,7 +24,6 @@ export class Engine {
     this.rl = new RLNavigator(policyQ);
     this.waypoints = [];
     this.trail = [];
-    this.estop = false;
     this.manual = null;
     this.events = [];
     this.tPrev = null;
@@ -35,6 +34,22 @@ export class Engine {
     this.goalStreak = 0;
     this.stallReported = false;
     this.carSide = 0;             // running average size of the car marker, px
+    // The car only drives while armed. Clicking only marks a target; GO arms.
+    // Arriving, losing the car marker or a stall disarms again.
+    this.armed = false;
+  }
+
+  arm() {
+    if (this.armed) return;
+    this.armed = true; this.newTarget(); this.slew.reset();
+    this.emit(this.waypoints.length ? `GO - driving to the clicked point${this.waypoints.length > 1 ? `s (${this.waypoints.length})` : ""}`
+      : this.cfg.control.followGoalMarker ? "GO - driving to the goal marker" : "GO - but there is no target: click a point first");
+  }
+
+  disarm(reason) {
+    if (!this.armed) return;
+    this.armed = false; this.slew.reset();
+    if (reason) this.emit(reason);
   }
 
   emit(msg) { this.events.push(msg); }
@@ -47,7 +62,7 @@ export class Engine {
 
   clearPath() { this.waypoints = []; this.trail = []; this.newTarget(); }
 
-  setEstop(on) { this.estop = on; this.slew.reset(); this.newTarget(); }
+  stopNow() { this.disarm("STOP pressed - car stopped."); this.slew.reset(); }
 
   newTarget() {
     this.stallReported = false;
@@ -110,11 +125,15 @@ export class Engine {
     if (target && (!this.goalWas || Math.hypot(target[0] - this.goalWas[0], target[1] - this.goalWas[1]) > 15)) this.newTarget();
     this.goalWas = target;
 
-    if (this.estop) return this.stop(out, "EMERGENCY STOP");
-    if (this.manual) return this.drive(out, this.manual[0], this.manual[1], dt, "manual driving");
-    if (!pose) return this.stop(out, this.localizer.initialised ? "car marker lost - stopped" : "searching for car marker");
-    if (!target) return this.stop(out, "ready - click a point or show a goal marker");
-    if (this.goalDone && !this.waypoints.length) return this.stop(out, "done - click a point or move the goal marker");
+    if (this.manual) return this.drive(out, this.manual[0], this.manual[1], dt, "manual driving (W A S D)");
+    if (!this.armed) {
+      const why = !pose ? (this.localizer.initialised ? "car marker lost" : "car marker 0 not seen")
+        : target ? "target set - press GO" : "stopped - click a point, then press GO";
+      return this.stop(out, `STOPPED: ${why}`);
+    }
+    if (!pose) { this.disarm("Car marker lost - stopped. Press GO to continue."); return this.stop(out, "STOPPED: car marker lost"); }
+    if (!target) { this.disarm("No target - stopped."); return this.stop(out, "STOPPED: no target"); }
+    if (this.goalDone && !this.waypoints.length) { this.disarm(); return this.stop(out, "STOPPED: arrived"); }
 
     const [d, err] = targetGeometry(pose, target[0], target[1], ppc);
     out.distCm = d; out.headingErr = err;
@@ -133,15 +152,16 @@ export class Engine {
         this.waypoints.shift();
         this.emit(`Reached waypoint (${d.toFixed(1)} cm off)` + (this.waypoints.length ? ` - ${this.waypoints.length} left` : ""));
         // Last clicked point done: don't head back to a goal marker that was already there
-        if (!this.waypoints.length) { this.goalDone = true; this.goalDoneAt = null; }
+        if (!this.waypoints.length) { this.goalDone = true; this.goalDoneAt = null; this.disarm("Arrived - stopped."); }
         this.newTarget();
       } else {
         this.emit(`Reached goal marker (${d.toFixed(1)} cm off)`);
         this.newTarget();
         this.goalDone = true;
         this.goalDoneAt = target;
+        this.disarm("Arrived - stopped.");
       }
-      return this.stop(out, "arrived");
+      return this.stop(out, "STOPPED: arrived");
     }
 
     let safetyNote;
@@ -149,9 +169,9 @@ export class Engine {
     if (this.safety.stalled) {
       if (!this.stallReported) {
         this.stallReported = true;
-        this.emit("Car is not moving although it is being driven - stopped. Check the battery, the wheels and that marker 0 is on the car. Click a new point to retry.");
+        this.disarm("Car is not moving although it is being driven - stopped. Check the battery, the wheels and that marker 0 is on the car, then press GO.");
       }
-      return this.stop(out, "car not moving - stopped (battery? wheels?)");
+      return this.stop(out, "STOPPED: car not moving (battery? wheels?)");
     }
     const msg = this.polarity.observe(vv, ww, pose, ppc, dt);
     if (msg) this.emit(msg);

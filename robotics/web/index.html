@@ -17,7 +17,7 @@
     <div class="view" id="view">
       <canvas id="canvas" width="1280" height="720"></canvas>
       <div class="banner" id="banner">Loading…</div>
-      <div class="hint" id="hint">Click to send the car there · Shift+click adds waypoints · right-click clears<span id="simHint"> · Ctrl/⌘+click moves the goal marker</span></div>
+      <div class="hint" id="hint">Click to mark a target · Shift+click adds more · right-click clears · then press <b>GO</b> (Enter)<span id="simHint"> · Ctrl/⌘+click moves the goal marker</span></div>
     </div>
     <div class="log" id="log" aria-live="polite"></div>
   </section>
@@ -44,12 +44,9 @@
       <button id="beepBtn" title="Beep on the car">Beep</button>
     </div>
     <p class="note" id="serialNote"></p>
-    <div class="row small">
-      <label for="guard">Car's own front stop</label>
-      <input type="number" id="guard" min="0" max="100" step="1"> <span class="unit">cm (0 = off)</span>
-    </div>
 
-    <button class="estop" id="estop">EMERGENCY STOP <kbd>Space</kbd></button>
+    <button class="drive go" id="driveBtn">▶ GO <kbd>Enter</kbd></button>
+    <p class="note">The car only moves after you press GO, and stops by itself on arrival, if the car marker is lost, or if it seems stuck. <kbd>Space</kbd> stops it any time.</p>
     <div class="row two">
       <button id="clearBtn">Clear path <kbd>C</kbd></button>
       <button id="flipBtn">Flip marker 180°</button>
@@ -74,7 +71,6 @@
       <input type="range" id="speed" min="0.2" max="1" step="0.05"><span class="unit" id="speedVal"></span>
     </div>
     <label class="check"><input type="checkbox" id="followGoal"> Follow goal marker</label>
-    <label class="check"><input type="checkbox" id="obstacles"> Obstacle avoidance (ultrasonic)</label>
     <label class="check"><input type="checkbox" id="autoPol"> Auto-detect motor direction</label>
     <label class="check"><input type="checkbox" id="invT"> Invert throttle (motors reversed)</label>
     <label class="check"><input type="checkbox" id="invS"> Invert steering (left/right swapped)</label>
@@ -87,7 +83,7 @@
     <h2>Markers</h2>
     <p class="note">Car: marker <b>ID 0</b> on top, arrow to the front. Goal: any other ID. Print at 100% scale.</p>
     <a class="button" href="markers.html" target="_blank" rel="noopener">Open printable markers</a>
-    <p class="note keys">Keys: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive by hand · <kbd>Space</kbd> stop · <kbd>C</kbd> clear · <kbd>F</kbd> full screen</p>
+    <p class="note keys">Keys: <kbd>Enter</kbd> GO · <kbd>Space</kbd> STOP · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive by hand (hold) · <kbd>C</kbd> clear · <kbd>F</kbd> full screen</p>
   </aside>
 </div>
 <video id="video" playsinline muted hidden></video>

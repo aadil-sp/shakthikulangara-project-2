@@ -70,9 +70,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.icon { padding: 8px 12px; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 700; flex: 1; }
 button.primary.connected { background: var(--ok); border-color: var(--ok); }
-.estop { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 800; font-size: 17px; padding: 14px; margin-top: 8px; }
-.estop:hover { background: #b91c1c; }
-.estop.active { background: #fff; color: var(--bad); }
+.drive { color: #fff; font-weight: 800; font-size: 18px; padding: 14px; margin-top: 8px; letter-spacing: 0.02em; }
+.drive.go { background: var(--ok); border-color: var(--ok); }
+.drive.go:hover { background: #15803d; }
+.drive.stop { background: var(--bad); border-color: var(--bad); }
+.drive.stop:hover { background: #b91c1c; }
 kbd { font: 11px var(--mono); padding: 1px 5px; border: 1px solid currentColor; border-radius: 4px; opacity: 0.8; margin: 0 1px; }
 .note { margin: 0; color: var(--muted); font-size: 12px; }
 .note.warn { color: var(--warn); }

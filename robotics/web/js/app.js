@@ -1,6 +1,6 @@
 // ArUcoNav web app: camera / simulator -> ArUco -> engine -> USB gateway.
 import { Engine } from "./engine.js";
-import { GatewayLink, serialSupported, F_GUARD, F_FAULT_L, F_FAULT_F, F_FAULT_R } from "./link.js";
+import { GatewayLink, serialSupported } from "./link.js";
 import { SimWorld } from "./sim.js";
 import { MarkerTracker } from "./vision.js";
 
@@ -17,12 +17,13 @@ const DEFAULTS = {
     // Off by default: on a real car these made it move without being asked
     autoPolarity: false, followGoalMarker: false, rlLearnOnline: false,
   },
-  obstacle: { enabled: true, warnCm: 35, stopCm: 15, maxEscapes: 0 },
+  // Ultrasonic sensors are not used for driving: the car moves only on GO
+  obstacle: { enabled: false, warnCm: 35, stopCm: 15, maxEscapes: 0 },
   link: { sendHz: 20, timeoutS: 1, guardCm: 12 },
   lastCamera: "sim",
 };
 // v2: earlier saves could hold motor-direction flips made by the auto-detector
-const STORE = "aruconav-settings-v2";
+const STORE = "aruconav-settings-v3";
 function loadSettings() {
   const cfg = structuredClone(DEFAULTS);
   try {
@@ -178,7 +179,7 @@ async function connectGateway(anyPort) {
   }
   try {
     await link.choose(anyPort);
-    await link.setGuard(cfg.link.guardCm);
+    await link.setGuard(0);          // ultrasonic off: the car's own front stop too
     if (source === "sim") log("Gateway connected. Pick your real camera above to drive the real car.");
   } catch (e) {
     if (e.name === "NotFoundError") log("No gateway chosen. Plug in the ESP32-C3 gateway and try again (Shift+click the button to list every USB port).");
@@ -200,7 +201,6 @@ function frame(now) {
     sim.car.step(dt);
     sim.draw(ctx);
     markers = sim.markers();
-    sonar = sim.car.sonar();
   } else {
     const src = fileImage || video;
     if (!fileImage && video.readyState < 2) { drawWaiting(); return; }
@@ -209,8 +209,6 @@ function frame(now) {
     ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
     ctx.restore();
     markers = tracker.detect(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const tele = link.fresh(cfg.link.timeoutS);
-    sonar = tele ? tele.sonar : null;
   }
 
   out = engine.process(markers, t, sonar);
@@ -284,15 +282,14 @@ function drawOverlays(o, sonar) {
       });
     }
   }
-  const warn = engine.estop || /lost|not moving|stop/i.test(o.status);
+  const warn = /lost|not moving|not seen/i.test(o.status);
   setBanner(o.status || "", warn);
 }
 
 // ---------------------------------------------------------------- panel
 const TELE_ROWS = [["pose", "Position"], ["heading", "Heading"], ["speed", "Speed"], ["target", "To target"],
   ["status", "Doing"], ["fps", "Camera / loop"], ["radio", "Radio"]];
-const BAR_ROWS = [["pwmL", "Left motor", "var(--motor)"], ["pwmR", "Right motor", "var(--motor)"],
-  ["sL", "Sonar left", "var(--sonar)"], ["sF", "Sonar front", "var(--sonar)"], ["sR", "Sonar right", "var(--sonar)"]];
+const BAR_ROWS = [["pwmL", "Left motor", "var(--motor)"], ["pwmR", "Right motor", "var(--motor)"]];
 function buildPanel() {
   $("tele").innerHTML = TELE_ROWS.map(([k, n]) => `<dt>${n}</dt><dd id="t_${k}">—</dd>`).join("");
   $("bars").innerHTML = BAR_ROWS.map(([k, n, c]) =>
@@ -317,9 +314,6 @@ function updatePanel(o) {
     if (tele.rtt) radio += ` · ${tele.rtt.toFixed(0)} ms`;
     if (link.status) radio += ` · loss ${link.status.loss}%`;
     if (tele.battery > 0) radio += ` · battery ${tele.battery.toFixed(1)} V`;
-    if (tele.flags & F_GUARD) radio += " · GUARD STOP";
-    const faults = [[F_FAULT_L, "left"], [F_FAULT_F, "front"], [F_FAULT_R, "right"]].filter(([b]) => tele.flags & b).map(([, n]) => n);
-    if (faults.length) radio += ` · sonar fault: ${faults.join(", ")}`;
   } else if (tele) radio = "car linked (v1 firmware)";
   set("radio", source === "sim" ? "simulator" : radio);
 
@@ -330,13 +324,10 @@ function updatePanel(o) {
   };
   bar("pwmL", Math.abs(o.pwm[0]) / 255, `${o.pwm[0] >= 0 ? "+" : ""}${o.pwm[0]}`);
   bar("pwmR", Math.abs(o.pwm[1]) / 255, `${o.pwm[1] >= 0 ? "+" : ""}${o.pwm[1]}`);
-  const sonar = source === "sim" ? sim.car.sonar() : tele ? tele.sonar : null;
-  [["sL", 0], ["sF", 1], ["sR", 2]].forEach(([k, i]) => {
-    if (!sonar) return bar(k, 0, "—");
-    const d = sonar[i];
-    const color = d < cfg.obstacle.stopCm ? "var(--bad)" : d < cfg.obstacle.warnCm ? "var(--warn)" : "var(--sonar)";
-    bar(k, Math.min(d, 150) / 150, `${d.toFixed(0)} cm`, color);
-  });
+  const btn = $("driveBtn");
+  btn.className = `drive ${engine.armed ? "stop" : "go"}`;
+  btn.firstChild.textContent = engine.armed ? "■ STOP " : "▶ GO ";
+  btn.lastChild.textContent = engine.armed ? "Space" : "Enter";
 
   // link pill
   const pill = $("pill");
@@ -374,6 +365,7 @@ canvas.addEventListener("click", e => {
   if (source === "sim" && (e.ctrlKey || e.metaKey)) return moveSimGoal(e);
   const [x, y] = canvasPoint(e);
   engine.addWaypoint(x, y, e.shiftKey);
+  if (!engine.armed) setBanner("Target set - press GO (Enter) to drive");
 });
 canvas.addEventListener("contextmenu", e => {
   e.preventDefault();
@@ -392,7 +384,8 @@ const typing = e => ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) &
 window.addEventListener("keydown", e => {
   if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (k === " ") { e.preventDefault(); toggleEstop(); }
+  if (k === " ") { e.preventDefault(); engine.stopNow(); }
+  else if (k === "enter") { e.preventDefault(); engine.arm(); }
   else if (k === "c") engine.clearPath();
   else if (k === "f") document.fullscreenElement ? document.exitFullscreen() : $("view").requestFullscreen?.().catch(() => {});
   else if ("wasd".includes(k) && k.length === 1) { keys.add(k); e.preventDefault(); }
@@ -400,11 +393,8 @@ window.addEventListener("keydown", e => {
 window.addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
 window.addEventListener("blur", () => keys.clear());
 
-function toggleEstop() {
-  engine.setEstop(!engine.estop);
-  $("estop").classList.toggle("active", engine.estop);
-  $("estop").firstChild.textContent = engine.estop ? "RELEASE STOP " : "EMERGENCY STOP ";
-  log(engine.estop ? "Emergency stop ON" : "Emergency stop released");
+function toggleDrive() {
+  if (engine.armed) engine.stopNow(); else engine.arm();
 }
 
 // ---------------------------------------------------------------- controls
@@ -418,7 +408,6 @@ function setup() {
   buildPanel();
   bindCheck("mirror", cfg.vision, "mirror");
   bindCheck("followGoal", cfg.control, "followGoalMarker");
-  bindCheck("obstacles", cfg.obstacle, "enabled");
   bindCheck("autoPol", cfg.control, "autoPolarity");
   bindCheck("invT", cfg.control, "invertThrottle");
   bindCheck("invS", cfg.control, "invertSteering");
@@ -429,15 +418,12 @@ function setup() {
   const speed = $("speed"), speedVal = $("speedVal");
   speed.value = cfg.control.speed; speedVal.textContent = `${Math.round(cfg.control.speed * 100)}%`;
   speed.oninput = () => { cfg.control.speed = +speed.value; speedVal.textContent = `${Math.round(cfg.control.speed * 100)}%`; save(); };
-  const guard = $("guard");
-  guard.value = cfg.link.guardCm;
-  guard.onchange = () => { cfg.link.guardCm = Math.max(0, Math.min(100, +guard.value || 0)); guard.value = cfg.link.guardCm; link.setGuard(cfg.link.guardCm); save(); };
 
   $("camSelect").onchange = e => openSource(e.target.value);
   $("camRefresh").onclick = () => listCameras(true);
   $("connectBtn").onclick = e => connectGateway(e.shiftKey);
   $("beepBtn").onclick = () => link.beep();
-  $("estop").onclick = toggleEstop;
+  $("driveBtn").onclick = toggleDrive;
   $("clearBtn").onclick = () => engine.clearPath();
   $("flipBtn").onclick = () => {
     cfg.vision.headingOffsetDeg = cfg.vision.headingOffsetDeg ? 0 : 180;
@@ -455,12 +441,12 @@ function setup() {
     n.className = "note warn";
   } else {
     $("serialNote").textContent = "Plug the ESP32-C3 gateway into this laptop, then connect. Chrome remembers it next time.";
-    link.reconnect().then(ok => { if (ok) { log("Reconnected to the gateway allowed earlier"); link.setGuard(cfg.link.guardCm); updateModeUi(); } }).catch(() => {});
+    link.reconnect().then(ok => { if (ok) { log("Reconnected to the gateway allowed earlier"); link.setGuard(0); updateModeUi(); } }).catch(() => {});
     navigator.serial.addEventListener("disconnect", () => { log("Gateway unplugged"); link.close().then(updateModeUi); });
   }
   if (!navigator.mediaDevices?.getUserMedia) log("This browser has no camera access here. Use https:// in Chrome, Edge or Firefox.");
 
-  log("ArUcoNav ready. Click on the picture to send the car there. Shift+click adds waypoints, right-click clears.");
+  log("ArUcoNav ready. Click on the picture to mark a target, then press GO (Enter). Space stops the car.");
   updateModeUi();
   listCameras(false).then(async () => {
     if (cfg.lastCamera !== "sim" && [...$("camSelect").options].some(o => o.value === cfg.lastCamera)) {
@@ -478,7 +464,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     keys.clear();
     if (link.open) link.send(0, 0);
-    if (source !== "sim" && (engine.waypoints.length || engine.goalMem)) { engine.clearPath(); log("Page hidden - car stopped and path cleared"); }
+    if (engine.armed) engine.disarm("Page hidden - car stopped.");
   }
 });
 setup();

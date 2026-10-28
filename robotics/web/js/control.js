@@ -161,7 +161,6 @@ export class SafetyLayer {
   }
   step(v, w, sonar, goalCm, poseCm, dt) {
     const S = SafetyLayer;
-    if (!this.cfg.enabled) return [v, w, ""];
     if (poseCm && v > 0.2 && this.mode === "normal") {
       if (!this.ref) { this.ref = poseCm; this.stuckT = 0; }
       this.stuckT += dt;
