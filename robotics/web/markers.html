@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArUcoNav Markers</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  /* Print sheet: real-size markers (CSS cm), A4 friendly. */
+  :root { --fg: #111; --muted: #555; --bg: #fff; --accent: #4f46e5; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+         padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header { max-width: 18cm; margin: 0 auto 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p { margin: 4px 0; color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+  .controls label { display: flex; gap: 6px; align-items: center; }
+  input { width: 5em; font: inherit; padding: 4px 6px; }
+  .sheet { display: flex; flex-wrap: wrap; gap: 1.2cm; justify-content: center; max-width: 18cm; margin: 0 auto; }
+  figure { margin: 0; text-align: center; break-inside: avoid; }
+  figcaption { margin-top: 0.25cm; font-weight: 700; font-size: 13px; }
+  figcaption small { display: block; font-weight: 400; color: var(--muted); }
+  svg { display: block; }
+  @media print { header { display: none; } body { padding: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Printable ArUco markers</h1>
+  <p>Print at <b>100% scale</b> (no "fit to page"), then check one marker with a ruler. ID 0 goes on top of the car with its arrow pointing to the front. Any other ID is a goal.</p>
+  <div class="controls">
+    <label>Black square size <input type="number" id="size" value="5" min="2" max="15" step="0.5"> cm</label>
+    <label>IDs <input type="text" id="ids" value="0,1,2,3" style="width:8em"></label>
+    <button onclick="window.print()">Print</button>
+  </div>
+  <p>The app reads the car marker size as 5 cm. If you print another size, the speed and distance readings scale with it.</p>
+</header>
+<main class="sheet" id="sheet"></main>
+<script type="module">
+  import { DICT_4X4_50 } from "./js/dict.js";
+  const sheet = document.getElementById("sheet");
+  function marker(id, cm) {
+    const bits = parseInt(DICT_4X4_50[id], 16).toString(2).padStart(16, "0");
+    const cells = [];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++)
+      if (bits[r * 4 + c] === "1") cells.push(`<rect x="${c + 1}" y="${r + 1}" width="1.02" height="1.02" fill="#fff"/>`);
+    // 6x6 cells: black border + 4x4 code, with a white quiet zone of one cell around
+    const arrow = id === 0 ? `<path d="M4 -0.15 L4.45 0.55 L3.55 0.55 Z" fill="#111"/>` : "";
+    return `<svg viewBox="-1 -1 8 8" width="${cm * 8 / 6}cm" height="${cm * 8 / 6}cm" shape-rendering="crispEdges">
+      <rect x="-1" y="-1" width="8" height="8" fill="#fff"/><rect x="0" y="0" width="6" height="6" fill="#000"/>${cells.join("")}
+      <g transform="translate(-1 -1)">${arrow}</g></svg>`;
+  }
+  function render() {
+    const cm = Math.max(2, Math.min(15, +document.getElementById("size").value || 5));
+    const ids = document.getElementById("ids").value.split(/[ ,]+/).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < 50);
+    sheet.innerHTML = ids.map(id => `<figure>${marker(id, cm)}<figcaption>ID ${id}<small>${id === 0 ? "car (arrow = front)" : "goal"} · ${cm} cm</small></figcaption></figure>`).join("");
+  }
+  document.getElementById("size").oninput = render;
+  document.getElementById("ids").oninput = render;
+  render();
+</script>
+</body>
+</html>

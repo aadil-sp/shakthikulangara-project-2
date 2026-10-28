@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArUcoNav</title>
+<meta name="description" content="Drive an ESP32 robot car to any point you click on an overhead camera picture. Runs in the browser: camera, ArUco markers, USB gateway.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="vendor/cv.js"></script>
+<script src="vendor/aruco.js"></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <section class="stage">
+    <div class="view" id="view">
+      <canvas id="canvas" width="1280" height="720"></canvas>
+      <div class="banner" id="banner">Loading…</div>
+      <div class="hint" id="hint">Click to send the car there · Shift+click adds waypoints · right-click clears<span id="simHint"> · Ctrl/⌘+click moves the goal marker</span></div>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+  </section>
+
+  <aside class="panel">
+    <header class="brand">
+      <div>
+        <h1>ArUcoNav</h1>
+        <p>Overhead-camera robot navigation</p>
+      </div>
+      <span class="pill" id="pill">SIMULATOR</span>
+    </header>
+
+    <h2>Camera</h2>
+    <div class="row">
+      <select id="camSelect" aria-label="Camera"><option value="sim">Simulator (virtual camera)</option></select>
+      <button class="icon" id="camRefresh" title="Search for cameras again" aria-label="Search for cameras again">⟳</button>
+    </div>
+    <label class="check"><input type="checkbox" id="mirror"> Mirror camera image</label>
+
+    <h2>Robot link</h2>
+    <div class="row">
+      <button class="primary" id="connectBtn">Connect gateway (USB)</button>
+      <button id="beepBtn" title="Beep on the car">Beep</button>
+    </div>
+    <p class="note" id="serialNote"></p>
+    <div class="row small">
+      <label for="guard">Car's own front stop</label>
+      <input type="number" id="guard" min="0" max="100" step="1"> <span class="unit">cm (0 = off)</span>
+    </div>
+
+    <button class="estop" id="estop">EMERGENCY STOP <kbd>Space</kbd></button>
+    <div class="row two">
+      <button id="clearBtn">Clear path <kbd>C</kbd></button>
+      <button id="flipBtn">Flip marker 180°</button>
+    </div>
+
+    <div class="simbox" id="simBox">
+      <h2>Simulator</h2>
+      <div class="row three">
+        <button id="obsBtn">Add obstacles</button>
+        <button id="obsClear">Clear</button>
+        <button id="carReset">Reset car</button>
+      </div>
+    </div>
+
+    <h2>Navigation</h2>
+    <div class="row">
+      <label for="brain">Brain</label>
+      <select id="brain"><option value="classic">Classic controller</option><option value="rl">Reinforcement learning</option></select>
+    </div>
+    <div class="row">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0.2" max="1" step="0.05"><span class="unit" id="speedVal"></span>
+    </div>
+    <label class="check"><input type="checkbox" id="followGoal"> Follow goal marker</label>
+    <label class="check"><input type="checkbox" id="obstacles"> Obstacle avoidance (ultrasonic)</label>
+    <label class="check"><input type="checkbox" id="autoPol"> Auto-detect motor direction</label>
+    <label class="check"><input type="checkbox" id="invT"> Invert throttle (motors reversed)</label>
+    <label class="check"><input type="checkbox" id="invS"> Invert steering (left/right swapped)</label>
+    <label class="check"><input type="checkbox" id="rlLearn"> RL: keep learning while driving</label>
+
+    <h2>Live telemetry</h2>
+    <dl class="tele" id="tele"></dl>
+    <div class="bars" id="bars"></div>
+
+    <h2>Markers</h2>
+    <p class="note">Car: marker <b>ID 0</b> on top, arrow to the front. Goal: any other ID. Print at 100% scale.</p>
+    <a class="button" href="markers.html" target="_blank" rel="noopener">Open printable markers</a>
+    <p class="note keys">Keys: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive by hand · <kbd>Space</kbd> stop · <kbd>C</kbd> clear · <kbd>F</kbd> full screen</p>
+  </aside>
+</div>
+<video id="video" playsinline muted hidden></video>
+</body>
+</html>
