@@ -101,6 +101,21 @@ class TestControl(unittest.TestCase):
         self.assertIsNotNone(msg)
 
 
+class TestSafety(unittest.TestCase):
+    def test_gives_up_when_the_car_never_moves(self):
+        from markerpilot.config import ObstacleConfig
+        from markerpilot.control.navigator import SafetyLayer
+        s = SafetyLayer(ObstacleConfig())
+        for _ in range(400):           # 13 s of "drive forward" while the camera sees no motion
+            v, w, note = s.step(0.8, 0.0, None, 50.0, (10.0, 10.0), 0.033)
+            if s.stalled:
+                break
+        self.assertTrue(s.stalled)
+        self.assertEqual((v, w), (0.0, 0.0))
+        s.reset()
+        self.assertFalse(s.stalled)
+
+
 class TestRL(unittest.TestCase):
     def test_state_encoding_in_range(self):
         for d in (1, 5, 20, 60, 300):

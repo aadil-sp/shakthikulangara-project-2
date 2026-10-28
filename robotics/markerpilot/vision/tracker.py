@@ -23,6 +23,11 @@ class Marker:
     corners: np.ndarray  # 4x2, order TL, TR, BR, BL
 
 
+# Two threads detect markers as fast as eight on a quiet machine, and much
+# faster on a busy one, where OpenCV's default pool fights everything else.
+cv2.setNumThreads(2)
+
+
 def get_dictionary(name: str):
     return cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, name))
 

@@ -65,7 +65,7 @@ def _linux_devices() -> List[Tuple[int, str]]:
 def _mac_names() -> List[str]:
     try:
         out = subprocess.run(["system_profiler", "SPCameraDataType"], capture_output=True,
-                             text=True, timeout=6).stdout
+                             text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return []
     return [line.strip().rstrip(":") for line in out.splitlines()

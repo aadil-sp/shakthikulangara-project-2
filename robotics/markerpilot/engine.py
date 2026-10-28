@@ -27,6 +27,12 @@ log = logging.getLogger("markerpilot.engine")
 LATENCY_S = 0.08   # Camera + radio delay compensated by predicting the pose ahead
 
 
+GOAL_CONFIRM_FRAMES = 4   # goal marker seen this many frames in a row before the car goes
+GOAL_HIDE_CM = 25.0       # car within this distance may be hiding the goal under its body
+GOAL_MEMORY_S = 8.0       # ...then the goal is remembered this long
+GOAL_LOST_S = 0.7         # otherwise a goal that disappears is forgotten quickly
+
+
 @dataclass
 class EngineOutput:
     pwm: Tuple[int, int] = (0, 0)
@@ -63,6 +69,8 @@ class Engine:
         self._goal_was: Optional[Tuple[float, float]] = None
         self._goal_done = False
         self._goal_mem: Optional[Tuple[float, float, float]] = None   # x, y, time last seen
+        self._goal_streak = 0          # consecutive frames the goal marker was seen
+        self._stall_reported = False
 
     # ----- commands from the UI -------------------------------------------------
     def add_waypoint(self, x: float, y: float, append: bool) -> None:
@@ -84,6 +92,7 @@ class Engine:
 
     def _new_target(self) -> None:
         self._goal_done = False
+        self._stall_reported = False
         self.classic.reset()
         self.safety.reset()
         self.rl.reset()
@@ -116,12 +125,22 @@ class Engine:
         target = self.waypoints[0] if self.waypoints else None
         if target is None and self.cfg.control.follow_goal_marker:
             goals = goal_markers(out.markers, v_cfg.car_marker_id, v_cfg.goal_marker_id)
-            if goals:
+            # A goal must be seen in several frames in a row: a one-frame false
+            # detection (cupboard edge, fan grille) must never start the car
+            self._goal_streak = self._goal_streak + 1 if goals else 0
+            if goals and self._goal_streak >= GOAL_CONFIRM_FRAMES:
                 self._goal_mem = (goals[0].x, goals[0].y, t)
-            # The car body hides a floor marker as it drives over it: keep the
-            # last seen goal position for a while
-            if self._goal_mem is not None and t - self._goal_mem[2] < 8.0:
-                target = self._goal_mem[:2]
+            if self._goal_mem is not None:
+                # The car body hides a floor marker as it drives over it, so keep
+                # the last position for a while, but only when the car is close
+                # enough to be the thing hiding it
+                near = pose is not None and math.hypot(pose.x - self._goal_mem[0], pose.y - self._goal_mem[1]) \
+                    < GOAL_HIDE_CM * px_per_cm
+                keep = GOAL_MEMORY_S if near else GOAL_LOST_S
+                if t - self._goal_mem[2] < keep:
+                    target = self._goal_mem[:2]
+                else:
+                    self._goal_mem = None
         out.target = target
         if target is not None and (self._goal_was is None or
                                    math.hypot(target[0] - self._goal_was[0], target[1] - self._goal_was[1]) > 15):
@@ -170,6 +189,12 @@ class Engine:
 
         pose_cm = (pose.x / px_per_cm, pose.y / px_per_cm)
         v, w, safety_note = self.safety.step(v, w, sonar, dist_cm, pose_cm, dt)
+        if self.safety.stalled:
+            if not self._stall_reported:
+                self._stall_reported = True
+                self.emit("Car is not moving although it is being driven - stopped. "
+                          "Check the battery, the wheels and that marker 0 is on the car. Click a new point to retry.")
+            return self._stop(out, "car not moving - stopped (battery? wheels?)")
         msg = self.polarity.observe(v, w, pose, px_per_cm, dt)
         if msg:
             self.emit(msg)

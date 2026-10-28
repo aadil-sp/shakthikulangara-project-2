@@ -71,6 +71,8 @@ class SafetyLayer:
     DETOUR_S = 0.9
     STUCK_S = 0.8
     ESCAPE_S = 0.6
+    MAX_ESCAPES = 2       # escapes that achieve nothing before giving up
+    PROGRESS_CM = 4.0     # moving this far counts as progress
 
     def __init__(self, cfg: ObstacleConfig):
         self.cfg = cfg
@@ -82,6 +84,11 @@ class SafetyLayer:
         self._side = 1.0
         self._stuck_t = 0.0
         self._ref: Optional[Tuple[float, float]] = None
+        self._escapes = 0
+        self._escape_from: Optional[Tuple[float, float]] = None
+        # True when escaping keeps failing: the car isn't moving at all (battery
+        # off, wheels lifted, marker held in a hand). Cleared by reset().
+        self.stalled = False
 
     def step(self, v: float, w: float, sonar: Sonar, goal_cm: Optional[float], pose_cm: Optional[Tuple[float, float]],
              dt: float) -> Tuple[float, float, str]:
@@ -96,6 +103,14 @@ class SafetyLayer:
             if math.hypot(pose_cm[0] - self._ref[0], pose_cm[1] - self._ref[1]) > 1.5:
                 self._ref, self._stuck_t = pose_cm, 0.0
             elif self._stuck_t > self.STUCK_S:
+                if self._escape_from is not None and \
+                        math.hypot(pose_cm[0] - self._escape_from[0], pose_cm[1] - self._escape_from[1]) < self.PROGRESS_CM:
+                    self._escapes += 1
+                else:
+                    self._escapes, self._escape_from = 1, pose_cm
+                if self._escapes > self.MAX_ESCAPES:
+                    self.stalled = True
+                    return 0.0, 0.0, "car not moving - stopped"
                 left, right = (sonar[0], sonar[2]) if sonar else (0.0, 1.0)
                 self._mode, self._timer, self._side = "escape", 0.0, 1.0 if right >= left else -1.0
                 self._ref = None

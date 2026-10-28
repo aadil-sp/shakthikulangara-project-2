@@ -99,7 +99,7 @@ class CarLocalizer:
             return
         self._rejects = 0
 
-        K = self.P @ H.T @ np.linalg.inv(S)
+        K = np.linalg.solve(S, H @ self.P).T      # = P H^T S^-1 (S and P are symmetric)
         self.x = self.x + K @ innov
         self.x[2] = wrap_angle(self.x[2])
         self.P = (np.eye(5) - K @ H) @ self.P
