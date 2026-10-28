@@ -4,7 +4,7 @@ MarkerPilot is the robot-navigation app from the robotics project. Install it wi
 
 ## Linux laptop (Ubuntu, Debian, Mint): double-click installer
 
-1. Copy **`markerpilot_2.0.0_all.deb`** to the laptop. Build it with `python3 tools/build_linux_deb.py`; it lands in `dist/`.
+1. Download **[markerpilot_2.0.0_all.deb](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot_2.0.0_all.deb)** on the laptop, or copy it over. To rebuild it after a code change, run `python3 tools/build_linux_deb.py`; it lands in `dist/`.
 2. **Double-click it.** The software installer opens. Click **Install** and enter your password.
    - If double-click opens an archive viewer instead, right-click the file → **Open With → Software Install**, or run `sudo apt install ./markerpilot_2.0.0_all.deb`.
 3. Keep the laptop **online** while it installs. It downloads OpenCV, PyQt6, numpy and pyserial once (about 120 MB, a few minutes).
@@ -49,7 +49,8 @@ Use this on Intel Macs, Raspberry Pi and ARM Linux, which have no ready-made app
 | Computer | File |
 | :--- | :--- |
 | macOS (Apple Silicon M1/M2/M3/M4) | [markerpilot-macos-arm64](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot-macos-arm64) |
-| Windows / Linux | The installer commands above. Ready-made apps arrive once the [release pipeline](../ci/README.md) is enabled. |
+| Linux laptop (Ubuntu/Debian/Mint), double-click | [markerpilot_2.0.0_all.deb](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/markerpilot_2.0.0_all.deb) |
+| Windows | The installer command above. A ready-made app arrives once the [release pipeline](../ci/README.md) is enabled. |
 | Firmware for all boards (zip) | [firmware-all-boards.zip](https://github.com/aadil-sp/shakthikulangara-project-2/releases/latest/download/firmware-all-boards.zip) |
 
 On Linux and macOS, make a downloaded file runnable with `chmod +x markerpilot-*`.
